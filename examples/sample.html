@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive HTML — sample</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      max-width: 760px;
+      margin: 3rem auto 6rem;
+      padding: 0 1.25rem;
+      color: #1a1a1a;
+      background: #fafaf8;
+    }
+    h1 { font-size: 2.1rem; margin-bottom: 0.4rem; letter-spacing: -0.02em; }
+    .lede { color: #555; font-size: 1.05rem; margin-top: 0; }
+    h2 { margin-top: 2.4rem; font-size: 1.35rem; }
+    .callout {
+      background: #fff8d8;
+      border-left: 3px solid #d9a800;
+      padding: 0.9rem 1.1rem;
+      margin: 1.6rem 0;
+      border-radius: 4px;
+    }
+    figure { margin: 1.8rem 0; }
+    figure img { max-width: 100%; border-radius: 6px; display: block; }
+    figcaption { color: #666; font-size: 0.9rem; margin-top: 0.5rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1.2rem 0; font-size: 0.95rem; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: #f3f3f0; font-weight: 600; }
+    code { background: #eee; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.92em; }
+    kbd {
+      font: 0.85em/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #2d2d2d; color: #fff;
+      border-radius: 3px; padding: 1px 6px;
+    }
+  </style>
+  <link rel="stylesheet" href="/client/ih.css">
+</head>
+<body>
+  <h1>Sample page</h1>
+  <p class="lede">A placeholder document you can use to smoke-test the comment library end-to-end. Highlight any prose, click the element picker, or open the floating panel and leave a general note.</p>
+
+  <div class="callout">
+    <strong>How this works.</strong> Whatever you point at gets wrapped in a stable anchor and posted to a local server. An agent reads the queue, edits this very HTML in response, and the page reloads with a short tour of what changed.
+  </div>
+
+  <h2>Three ways to leave a comment</h2>
+  <p>The first is <em>text selection</em>. Drag across any prose and a small inline action appears. Good for "rewrite this", "this is wrong", or "expand on this idea".</p>
+  <p>The second is <em>element selection</em>. Toggle the picker on, then click a paragraph, image, or table. Hold shift to add more to your selection. Use this when the comment is about a whole region, not a span of text.</p>
+  <p>The third is <em>page-level</em>. Open the panel, hit "+ general", and leave a free-floating note — useful for "feels too long", "missing a section about X", and other anchorless feedback.</p>
+
+  <h2>Where comments live</h2>
+  <table>
+    <thead>
+      <tr><th>What</th><th>Where</th><th>Format</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Your queue</td><td><code>.ih/comments.jsonl</code></td><td>one batch per line</td></tr>
+      <tr><td>Agent replies</td><td><code>.ih/updates.json</code></td><td>append-only array</td></tr>
+      <tr><td>What you've seen</td><td><code>.ih/seen.json</code></td><td>most recent update id</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Keyboard</h2>
+  <p>Press <kbd>?</kbd> for the cheat sheet, <kbd>E</kbd> to toggle the element picker, <kbd>R</kbd> to dismiss the post-reload tour, or <kbd>Esc</kbd> to close any open popover.</p>
+  <script src="/client/ih.js" defer></script>
+</body>
+</html>
