@@ -15,7 +15,8 @@ interactive-html/
 ├── server/
 │   └── server.py     # stdlib-only HTTP server
 ├── cli/
-│   └── inject.py     # idempotent <link>/<script> injection + removal
+│   ├── inject.py     # idempotent <link>/<script> injection + removal
+│   └── watch.py      # tails comments.jsonl and dispatches to an agent CLI
 ├── examples/
 │   └── sample.html   # smoke-test page
 ├── README.md
@@ -24,19 +25,28 @@ interactive-html/
 
 ## Quickstart
 
+Three commands across two terminals:
+
 ```bash
-# 1. Inject the client tags into every *.html in the folder you want to comment on
+# one-time: inject the client tags into every *.html
 python cli/inject.py examples
 
-# 2. Start the server (defaults to port 5050)
+# terminal 1: serve the artifact directory
 python server/server.py examples
 
-# 3. Open the URL it prints, e.g. http://localhost:5050/sample.html
+# terminal 2: watch for comments and dispatch them to an agent
+python cli/watch.py examples
 ```
 
-Comments are written to `examples/.ih/comments.jsonl`. When the agent appends
-a batch to `examples/.ih/updates.json`, the page reloads (scroll preserved)
-and walks through each `data-ih-change` region.
+Open the printed URL (e.g. `http://localhost:5050/sample.html`). Comments
+land in `examples/.ih/comments.jsonl`; the watcher hands each new batch to
+the agent, which edits the HTML and appends to `examples/.ih/updates.json`.
+The page reloads (scroll preserved) and walks through each
+`data-ih-change` region.
+
+The watcher defaults to `claude -p` (Claude Code in headless mode). Override
+with `--agent-cmd` to pipe the prompt into a different CLI. Use `--dry-run`
+to see the prompt without burning tokens.
 
 To remove the client layer cleanly:
 
