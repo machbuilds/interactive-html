@@ -17,6 +17,7 @@ import http.server
 import json
 import mimetypes
 import os
+import queue
 import socketserver
 import sys
 import threading
@@ -55,6 +56,45 @@ def with_utf8_charset(content_type: str) -> str:
     return content_type
 
 
+class Broadcaster:
+    """Fan-out for Server-Sent Events subscribers. Each subscriber gets its
+    own bounded queue — slow consumers drop events rather than blocking
+    publishers, so a stuck browser tab can't wedge the server."""
+
+    QUEUE_SIZE = 64
+
+    def __init__(self) -> None:
+        self._subscribers: list[queue.Queue] = []
+        self._lock = threading.Lock()
+
+    def subscribe(self) -> queue.Queue:
+        q: queue.Queue = queue.Queue(maxsize=self.QUEUE_SIZE)
+        with self._lock:
+            self._subscribers.append(q)
+        return q
+
+    def unsubscribe(self, q: queue.Queue) -> None:
+        with self._lock:
+            try:
+                self._subscribers.remove(q)
+            except ValueError:
+                pass
+
+    def publish(self, event_name: str, data: str) -> None:
+        envelope = {"name": event_name, "data": data}
+        with self._lock:
+            current = list(self._subscribers)
+        for q in current:
+            try:
+                q.put_nowait(envelope)
+            except queue.Full:
+                pass
+
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._subscribers)
+
+
 class Liveness:
     """Tracks parentage + last-request time so a watchdog can retire the
     process when the parent exits or no clients have called in a while."""
@@ -82,7 +122,12 @@ class Liveness:
         return None
 
 
-def build_handler_class(artifact_dir: Path, meta_dir: Path, liveness: Liveness):
+def build_handler_class(
+    artifact_dir: Path,
+    meta_dir: Path,
+    liveness: Liveness,
+    broadcaster: Broadcaster,
+):
     """Return a request-handler class closed over our per-server state. Using a
     closure (vs. mutating class attributes on a shared handler class) keeps
     state scoped to this server instance — friendlier to tests and to running
@@ -118,6 +163,9 @@ def build_handler_class(artifact_dir: Path, meta_dir: Path, liveness: Liveness):
             path = urlparse(self.path).path
             if path == "/_ih/info":
                 self._respond_json(200, self._info_payload())
+                return
+            if path == "/_ih/events":
+                self._handle_event_stream()
                 return
             if path.startswith("/client/"):
                 self._serve_client_asset(path[len("/client/"):])
@@ -192,6 +240,52 @@ def build_handler_class(artifact_dir: Path, meta_dir: Path, liveness: Liveness):
             sys.stdout.flush()
             self._respond_json(200, {"ok": True, "received": count})
 
+        def _handle_event_stream(self) -> None:
+            """SSE handler. Holds the connection open and forwards events
+            published on the broadcaster until the client disconnects."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            # Disable proxy buffering (nginx, etc.) — irrelevant on localhost
+            # but cheap to include and means this Just Works behind a proxy.
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+
+            sub = broadcaster.subscribe()
+            try:
+                self._sse_write("ready", json.dumps({"now": time.time()}))
+                last_ping = time.monotonic()
+                while True:
+                    # An open SSE connection is proof of a live client — keep
+                    # the idle-timeout watchdog from retiring the server while
+                    # someone has a browser tab open.
+                    liveness.touch()
+                    try:
+                        envelope = sub.get(timeout=1.0)
+                    except queue.Empty:
+                        if time.monotonic() - last_ping > 15:
+                            self.wfile.write(b": ping\n\n")
+                            self.wfile.flush()
+                            last_ping = time.monotonic()
+                        continue
+                    self._sse_write(envelope["name"], envelope["data"])
+                    last_ping = time.monotonic()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                broadcaster.unsubscribe(sub)
+
+        def _sse_write(self, event_name: str, data: str) -> None:
+            chunks = [f"event: {event_name}\n".encode("utf-8")]
+            for line in data.splitlines() or [""]:
+                chunks.append(f"data: {line}\n".encode("utf-8"))
+            chunks.append(b"\n")
+            for c in chunks:
+                self.wfile.write(c)
+            self.wfile.flush()
+
         def _record_seen(self) -> None:
             body = self._read_json_body() or {}
             (meta_dir / SEEN_FILE).write_text(json.dumps(body, indent=2), encoding="utf-8")
@@ -230,6 +324,23 @@ def watchdog(liveness: Liveness) -> None:
             os._exit(0)
 
 
+def updates_watcher(meta_dir: Path, broadcaster: Broadcaster) -> None:
+    """Poll updates.json's mtime once a second. When it changes, broadcast an
+    'updates' event so connected browsers refetch immediately instead of
+    waiting for their poll interval."""
+    path = meta_dir / UPDATES_FILE
+    last_mtime = path.stat().st_mtime if path.exists() else 0.0
+    while True:
+        time.sleep(1)
+        try:
+            mtime = path.stat().st_mtime
+        except FileNotFoundError:
+            continue
+        if mtime > last_mtime + 0.001:
+            last_mtime = mtime
+            broadcaster.publish("updates", json.dumps({"mtime": mtime}))
+
+
 def prepare_meta_dir(artifact_dir: Path) -> Path:
     meta = artifact_dir / META_DIR_NAME
     meta.mkdir(exist_ok=True)
@@ -263,7 +374,8 @@ def main() -> int:
 
     meta = prepare_meta_dir(artifact)
     liveness = Liveness(idle_timeout_s=args.idle_timeout)
-    handler_cls = build_handler_class(artifact, meta, liveness)
+    broadcaster = Broadcaster()
+    handler_cls = build_handler_class(artifact, meta, liveness, broadcaster)
 
     try:
         srv = ReusableThreadingServer((args.host, args.port), handler_cls)
@@ -275,12 +387,14 @@ def main() -> int:
         return 1
 
     threading.Thread(target=watchdog, args=(liveness,), daemon=True).start()
+    threading.Thread(target=updates_watcher, args=(meta, broadcaster), daemon=True).start()
 
     with srv:
         host = args.host or "localhost"
         print(f"[ih] serving   {artifact}")
         print(f"[ih] open      http://{host}:{args.port}/")
         print(f"[ih] info      http://{host}:{args.port}/_ih/info")
+        print(f"[ih] events    http://{host}:{args.port}/_ih/events  (SSE)")
         print(f"[ih] comments  {meta / COMMENTS_FILE}")
         print(f"[ih] updates   {meta / UPDATES_FILE}")
         if args.idle_timeout > 0:

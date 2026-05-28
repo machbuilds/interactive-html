@@ -25,8 +25,9 @@
   const UPDATES_URL = ".ih/updates.json";
   const COMMENTS_URL = "/comments";
   const SEEN_URL = "/_ih/seen";
+  const EVENTS_URL = "/_ih/events";
 
-  const POLL_MS = 4000;
+  const FALLBACK_POLL_MS = 15000;
   const SUBMIT_STALE_MS = 90_000;
   const TEXT_QUOTE_LIMIT = 220;
   const HTML_SNIPPET_LIMIT = 600;
@@ -90,6 +91,8 @@
     pending: loadState().pending || [],
     seenUpdateIds: new Set(),
     history: [],
+    eventSource: null,
+    sseConnected: false,
     pollTimer: null,
     elementMode: false,
     picked: [],
@@ -101,19 +104,14 @@
   };
 
   // -- anchor / selector --------------------------------------------------
-  let anchorCounter = 0;
-  const assignAnchorId = (el) => {
-    if (!el.hasAttribute("data-ih-id")) {
-      anchorCounter += 1;
-      el.setAttribute("data-ih-id", `n${anchorCounter}`);
-    }
-    return el.getAttribute("data-ih-id");
-  };
-
+  // A stable CSS selector built purely from structural position (or a real
+  // id= attribute when one is present). We intentionally avoid attributes
+  // that the client could add at runtime — the selector must work both
+  // against the live DOM AND against the file as it sits on disk, so the
+  // agent can find the same element.
   const stableSelector = (el) => {
     if (!el) return "";
     if (el.id) return `#${CSS.escape(el.id)}`;
-    if (el.hasAttribute("data-ih-id")) return `[data-ih-id="${el.getAttribute("data-ih-id")}"]`;
     const parts = [];
     let cur = el;
     while (cur && cur.nodeType === 1 && cur !== document.body) {
@@ -143,10 +141,8 @@
 
   const captureAnchor = (el) => {
     if (!el) return null;
-    assignAnchorId(el);
     return {
       selector: stableSelector(el),
-      ih_id: el.getAttribute("data-ih-id") || null,
       tag: el.tagName,
       quote: truncate((el.textContent || "").trim(), TEXT_QUOTE_LIMIT),
       html_snippet: truncate(el.outerHTML, HTML_SNIPPET_LIMIT),
@@ -463,7 +459,6 @@
     if (!anchor || !anchor.selector) return;
     let target = null;
     try { target = document.querySelector(anchor.selector); } catch {}
-    if (!target && anchor.ih_id) target = document.querySelector(`[data-ih-id="${anchor.ih_id}"]`);
     if (!target) { toast("Couldn't find that element on this page"); return; }
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     target.classList.add("is-tour-target");
@@ -524,11 +519,38 @@
     }
   };
 
-  // -- polling updates ----------------------------------------------------
-  const startPolling = () => {
-    if (state.pollTimer) clearInterval(state.pollTimer);
-    fetchUpdates();
-    state.pollTimer = setInterval(fetchUpdates, POLL_MS);
+  // -- live updates: SSE w/ slow-poll fallback ----------------------------
+  const startEvents = () => {
+    fetchUpdates(); // immediate priming fetch on page load
+    try {
+      const es = new EventSource(EVENTS_URL);
+      state.eventSource = es;
+      es.addEventListener("ready", () => {
+        state.sseConnected = true;
+        stopFallbackPolling();
+      });
+      es.addEventListener("updates", () => fetchUpdates());
+      es.onerror = () => {
+        // EventSource will auto-reconnect; meanwhile, run a slow poll so the
+        // user isn't blind to updates if the SSE channel is wedged.
+        state.sseConnected = false;
+        startFallbackPolling();
+      };
+    } catch {
+      // Browser without EventSource (very rare) — fall back to polling.
+      startFallbackPolling();
+    }
+  };
+
+  const startFallbackPolling = () => {
+    if (state.pollTimer) return;
+    state.pollTimer = setInterval(fetchUpdates, FALLBACK_POLL_MS);
+  };
+
+  const stopFallbackPolling = () => {
+    if (!state.pollTimer) return;
+    clearInterval(state.pollTimer);
+    state.pollTimer = null;
   };
 
   const fetchUpdates = async () => {
@@ -829,7 +851,7 @@
     renderPending();
     updateBadge();
     renderHistory();
-    startPolling();
+    startEvents();
     consumePostReloadTour();
 
     // Resume "agent working" indicator if we reloaded mid-flight
