@@ -28,6 +28,9 @@ import sys
 import time
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BUILTIN_AGENT = REPO_ROOT / "agent" / "agent.py"
+
 META_DIR_NAME = ".ih"
 COMMENTS_FILE = "comments.jsonl"
 UPDATES_FILE = "updates.json"
@@ -212,9 +215,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("artifact_dir", help="directory containing the HTML pages and .ih/")
     parser.add_argument(
+        "--agent",
+        choices=["cli", "builtin"],
+        default="cli",
+        help="'cli' uses --agent-cmd (default: claude -p); 'builtin' uses the bundled "
+             "dependency-free agent at agent/agent.py (needs ANTHROPIC_API_KEY)",
+    )
+    parser.add_argument(
         "--agent-cmd",
-        default=DEFAULT_AGENT_CMD,
-        help=f"shell command to invoke the agent; the prompt is sent on stdin (default: {DEFAULT_AGENT_CMD!r})",
+        default=None,
+        help=f"shell command to invoke the agent; the prompt is sent on stdin "
+             f"(default: {DEFAULT_AGENT_CMD!r}). Ignored when --agent builtin.",
     )
     parser.add_argument(
         "--interval",
@@ -246,16 +257,27 @@ def main() -> int:
         )
         return 1
 
+    if args.agent == "builtin":
+        if not BUILTIN_AGENT.is_file():
+            print(f"[watch] error: built-in agent not found at {BUILTIN_AGENT}", file=sys.stderr)
+            return 1
+        if args.agent_cmd:
+            print("[watch] warning: --agent-cmd is ignored with --agent builtin", file=sys.stderr)
+        agent_cmd = f"{shlex.quote(sys.executable)} {shlex.quote(str(BUILTIN_AGENT))}"
+    else:
+        agent_cmd = args.agent_cmd or DEFAULT_AGENT_CMD
+
     print(f"[watch] artifact   {artifact}")
     print(f"[watch] watching   {meta / COMMENTS_FILE}")
     print(f"[watch] writes     {meta / UPDATES_FILE} (via the agent)")
     print(f"[watch] cursor     {meta / CURSOR_FILE}")
+    print(f"[watch] agent      {agent_cmd}")
 
     try:
         dispatch_loop(
             artifact=artifact,
             meta=meta,
-            agent_cmd=args.agent_cmd,
+            agent_cmd=agent_cmd,
             interval=args.interval,
             dry_run=args.dry_run,
             once=args.once,

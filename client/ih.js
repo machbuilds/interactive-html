@@ -530,6 +530,7 @@
         stopFallbackPolling();
       });
       es.addEventListener("updates", () => fetchUpdates());
+      es.addEventListener("progress", (e) => onProgressEvent(e.data));
       es.onerror = () => {
         // EventSource will auto-reconnect; meanwhile, run a slow poll so the
         // user isn't blind to updates if the SSE channel is wedged.
@@ -551,6 +552,18 @@
     if (!state.pollTimer) return;
     clearInterval(state.pollTimer);
     state.pollTimer = null;
+  };
+
+  // Live status from the agent (via .ih/progress.json → 'progress' SSE event).
+  // Only reflect it while we're actually waiting on a submitted batch, so a
+  // stray progress file from another tab's work doesn't hijack the banner.
+  const onProgressEvent = (raw) => {
+    let info = null;
+    try { info = JSON.parse(raw); } catch { return; }
+    if (!info || !info.status) return;
+    if (!state.submitted) return;
+    if (info.phase === "done" || info.phase === "error") return;
+    setBusy(true, info.status);
   };
 
   const fetchUpdates = async () => {

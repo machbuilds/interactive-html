@@ -32,6 +32,7 @@ CLIENT_DIR = (PROJECT_ROOT / "client").resolve()
 META_DIR_NAME = ".ih"
 COMMENTS_FILE = "comments.jsonl"
 UPDATES_FILE = "updates.json"
+PROGRESS_FILE = "progress.json"
 SEEN_FILE = "seen.json"
 
 NO_CACHE_HEADERS = (
@@ -324,21 +325,41 @@ def watchdog(liveness: Liveness) -> None:
             os._exit(0)
 
 
-def updates_watcher(meta_dir: Path, broadcaster: Broadcaster) -> None:
-    """Poll updates.json's mtime once a second. When it changes, broadcast an
-    'updates' event so connected browsers refetch immediately instead of
-    waiting for their poll interval."""
-    path = meta_dir / UPDATES_FILE
-    last_mtime = path.stat().st_mtime if path.exists() else 0.0
+def file_watcher(meta_dir: Path, broadcaster: Broadcaster) -> None:
+    """Poll the meta files' mtimes once a second and broadcast SSE events when
+    they change, so connected browsers react immediately instead of waiting
+    for a poll interval:
+
+      updates.json  → 'updates' event (mtime only; client refetches the array)
+      progress.json → 'progress' event (file contents, for the busy banner)
+    """
+    updates_path = meta_dir / UPDATES_FILE
+    progress_path = meta_dir / PROGRESS_FILE
+
+    def current_mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
+
+    last_updates = current_mtime(updates_path)
+    last_progress = current_mtime(progress_path)
+
     while True:
         time.sleep(1)
-        try:
-            mtime = path.stat().st_mtime
-        except FileNotFoundError:
-            continue
-        if mtime > last_mtime + 0.001:
-            last_mtime = mtime
-            broadcaster.publish("updates", json.dumps({"mtime": mtime}))
+        u_mtime = current_mtime(updates_path)
+        if u_mtime > last_updates + 0.001:
+            last_updates = u_mtime
+            broadcaster.publish("updates", json.dumps({"mtime": u_mtime}))
+
+        p_mtime = current_mtime(progress_path)
+        if p_mtime > last_progress + 0.001:
+            last_progress = p_mtime
+            try:
+                payload = progress_path.read_text(encoding="utf-8").strip() or "{}"
+            except OSError:
+                payload = "{}"
+            broadcaster.publish("progress", payload)
 
 
 def prepare_meta_dir(artifact_dir: Path) -> Path:
@@ -387,7 +408,7 @@ def main() -> int:
         return 1
 
     threading.Thread(target=watchdog, args=(liveness,), daemon=True).start()
-    threading.Thread(target=updates_watcher, args=(meta, broadcaster), daemon=True).start()
+    threading.Thread(target=file_watcher, args=(meta, broadcaster), daemon=True).start()
 
     with srv:
         host = args.host or "localhost"

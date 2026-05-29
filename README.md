@@ -13,15 +13,21 @@ interactive-html/
 │   ├── ih.js         # injected into every HTML page
 │   └── ih.css
 ├── server/
-│   └── server.py     # stdlib-only HTTP server
+│   └── server.py     # stdlib-only HTTP server (+ SSE)
 ├── cli/
 │   ├── inject.py     # idempotent <link>/<script> injection + removal
-│   └── watch.py      # tails comments.jsonl and dispatches to an agent CLI
+│   └── watch.py      # tails comments.jsonl and dispatches to an agent
+├── agent/
+│   └── agent.py      # built-in, dependency-free Anthropic tool-use agent
 ├── examples/
 │   └── sample.html   # smoke-test page
 ├── README.md
 └── .gitignore
 ```
+
+Everything is Python standard library — no pip install, no build step.
+The built-in agent talks to the Anthropic API over `urllib`, so even that
+needs nothing beyond an API key.
 
 ## Quickstart
 
@@ -44,9 +50,29 @@ the agent, which edits the HTML and appends to `examples/.ih/updates.json`.
 The page reloads (scroll preserved) and walks through each
 `data-ih-change` region.
 
-The watcher defaults to `claude -p` (Claude Code in headless mode). Override
-with `--agent-cmd` to pipe the prompt into a different CLI. Use `--dry-run`
-to see the prompt without burning tokens.
+### Choosing an agent
+
+The watcher can drive two kinds of agent:
+
+```bash
+# default: pipe the prompt into Claude Code headless mode
+python cli/watch.py examples                 # == --agent cli --agent-cmd "claude -p"
+
+# any other CLI that takes a prompt on stdin and can edit files
+python cli/watch.py examples --agent-cmd "your-cli --flags"
+
+# the bundled, dependency-free agent (needs ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-...
+python cli/watch.py examples --agent builtin
+```
+
+The built-in agent (`agent/agent.py`) runs its own Anthropic tool-use loop
+with file tools scoped to the artifact directory. As it works it writes
+`.ih/progress.json`; the server streams that over SSE so the in-page busy
+banner shows live status ("reading sample.html", "recording the changes",
+…). Tune it with `--model` / `IH_AGENT_MODEL`, `--max-iterations`, and
+`--max-tokens`; use `--dry-run` on either the watcher or the agent to
+inspect without calling the API.
 
 To remove the client layer cleanly:
 
@@ -64,9 +90,15 @@ python cli/inject.py examples --remove
    - `POST /comments` → appends a batch to `.ih/comments.jsonl`
    - `POST /_ih/seen` → records which update IDs the user has acknowledged
    - `GET /_ih/info` → diagnostic JSON
-3. `client/ih.js` polls `.ih/updates.json` every ~4s. When a new batch
-   responds to one of the user's submitted comment IDs, the page reloads
-   (scroll preserved via sessionStorage) and a walkthrough is offered.
+   - `GET /_ih/events` → Server-Sent Events stream. A background thread
+     watches `.ih/updates.json` and `.ih/progress.json`; when either
+     changes it broadcasts an `updates` or `progress` event.
+3. `client/ih.js` subscribes to `/_ih/events`. On an `updates` event it
+   refetches `.ih/updates.json`; when a new batch responds to one of the
+   user's submitted comment IDs, the page reloads (scroll preserved via
+   sessionStorage) and a walkthrough is offered. A `progress` event updates
+   the busy banner. A 15s poll runs only as a fallback if the SSE channel
+   drops.
 
 The server auto-retires when its parent process dies or after the
 configurable idle timeout (default 10 min, `--idle-timeout 0` disables).
