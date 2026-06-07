@@ -15,10 +15,13 @@ interactive-html/
 ├── server/
 │   └── server.py     # stdlib-only HTTP server (+ SSE)
 ├── cli/
+│   ├── ih.py         # one-command launcher (inject + serve + watch)
 │   ├── inject.py     # idempotent <link>/<script> injection + removal
 │   └── watch.py      # tails comments.jsonl and dispatches to an agent
 ├── agent/
 │   └── agent.py      # built-in, dependency-free Anthropic tool-use agent
+├── skill/
+│   └── SKILL.md      # Claude Code skill — "make this page interactive"
 ├── examples/
 │   └── sample.html   # smoke-test page
 ├── README.md
@@ -31,17 +34,39 @@ needs nothing beyond an API key.
 
 ## Quickstart
 
-Three commands across two terminals:
+### Inside Claude Code (lowest friction)
+
+Install the skill once, then just ask in any session:
 
 ```bash
-# one-time: inject the client tags into every *.html
-python cli/inject.py examples
+ln -s "$(pwd)/skill" ~/.claude/skills/interactive-html   # one-time
+```
 
-# terminal 1: serve the artifact directory
-python server/server.py examples
+> "make this page interactive"
 
-# terminal 2: watch for comments and dispatch them to an agent
-python cli/watch.py examples
+Claude finds the HTML in your current directory, starts the server, hands
+you the URL, and then **acts as the agent itself** — when you comment in the
+page, the live session edits the HTML and it reloads. No second agent
+process, no cold start. (If you only have content and no file, say "make an
+interactive page from this" and Claude writes the HTML first.)
+
+### One command (manual)
+
+```bash
+python cli/ih.py examples       # inject + serve + watch + open browser
+python cli/ih.py                # current directory
+python cli/ih.py --no-watch     # serve + capture comments only (no agent)
+```
+
+This collapses the three steps below into one supervised process; Ctrl-C
+stops everything. It auto-bumps off a busy port and prints every page URL.
+
+### The three pieces, by hand
+
+```bash
+python cli/inject.py examples              # inject client tags
+python server/server.py examples           # terminal 1: serve
+python cli/watch.py examples               # terminal 2: dispatch to an agent
 ```
 
 Open the printed URL (e.g. `http://localhost:5050/sample.html`). Comments

@@ -37,7 +37,10 @@ UPDATES_FILE = "updates.json"
 CURSOR_FILE = ".watch-cursor.json"
 LOG_FILE = "watch.log"
 
-DEFAULT_AGENT_CMD = "claude -p"
+# Headless Claude Code can't surface permission prompts, so without an
+# auto-accept mode it silently refuses to edit files. acceptEdits lets it
+# apply edits/writes while still declining anything riskier.
+DEFAULT_AGENT_CMD = "claude -p --permission-mode acceptEdits"
 DEFAULT_INTERVAL = 2.0
 
 PROMPT_TEMPLATE = """\
@@ -218,8 +221,8 @@ def main() -> int:
         "--agent",
         choices=["cli", "builtin"],
         default="cli",
-        help="'cli' uses --agent-cmd (default: claude -p); 'builtin' uses the bundled "
-             "dependency-free agent at agent/agent.py (needs ANTHROPIC_API_KEY)",
+        help=f"'cli' uses --agent-cmd (default: {DEFAULT_AGENT_CMD!r}); 'builtin' uses the "
+             "bundled dependency-free agent at agent/agent.py (needs ANTHROPIC_API_KEY)",
     )
     parser.add_argument(
         "--agent-cmd",
