@@ -13,15 +13,15 @@ the HTML, and the page auto-reloads with a walkthrough of what changed.
 Because *you* (the current session) do the edits, there is no separate agent
 process and no cold-start — the loop is as fast as you can make an edit.
 
-## Install location
+## Runtime location
 
-The tooling lives in the Interactive HTML repo. Set this once for the machine:
+This skill is self-contained: its runtime ships in this same directory. The
+installer bakes the absolute path below in at install time, so every command
+here is runnable as written.
 
 ```
-IH_HOME = /Users/mach/conductor/workspaces/Interactive-html/boston
+IH_HOME = __IH_HOME__
 ```
-
-All commands below use `<IH_HOME>` for that path.
 
 ## When to invoke
 
@@ -41,7 +41,7 @@ All commands below use `<IH_HOME>` for that path.
    background (do NOT block the session):
 
    ```
-   python <IH_HOME>/cli/ih.py <dir> --no-watch --no-open
+   python __IH_HOME__/cli/ih.py <dir> --no-watch --no-open
    ```
 
    `--no-watch` is important: it starts the server only, because **you** are the
@@ -134,7 +134,7 @@ end the session it cleans itself up.
 Strip the client tags for a clean, server-independent copy:
 
 ```
-python <IH_HOME>/cli/inject.py <dir> --remove
+python __IH_HOME__/cli/inject.py <dir> --remove
 ```
 
 This leaves the `.ih/` directory in place; delete it manually if unwanted.
@@ -146,8 +146,8 @@ use the standalone watcher instead of this skill — it dispatches batches to an
 agent CLI:
 
 ```
-python <IH_HOME>/cli/ih.py <dir>                  # full loop, claude -p agent
-python <IH_HOME>/cli/ih.py <dir> --agent builtin  # bundled agent (ANTHROPIC_API_KEY)
+python __IH_HOME__/cli/ih.py <dir>                  # full loop, claude -p agent
+python __IH_HOME__/cli/ih.py <dir> --agent builtin  # bundled agent (ANTHROPIC_API_KEY)
 ```
 
 ## Gotchas
