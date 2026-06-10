@@ -1,201 +1,237 @@
 # Interactive HTML
 
-Turn any folder of static HTML into a live commenting surface. Highlight text,
-pick an element, or leave a general note — comments queue up locally and an
-agent reads them, edits the HTML in response, and the page auto-reloads with
-a short tour of what changed.
+> **Inline comments on any HTML page — an agent applies them.**
+>
+> Highlight text, pick an element, or leave a general note in any local
+> HTML file. The page POSTs your comment to a tiny local server. An agent
+> reads it, edits the HTML, and the page reloads with the change
+> highlighted — scroll preserved.
+
+<!-- ![demo](docs/demo.gif) -->
+<!-- Demo GIF goes here. See "Recording the demo" below. -->
+
+Works with Claude Code, Cursor, or any agent CLI. ~43KB client, zero
+dependencies, no build step. Static HTML stays static — the comment layer
+is a `<link>` + `<script>` you can strip back out in one command.
+
+---
+
+## Quickstart
+
+```bash
+git clone https://github.com/machbuilds/interactive-html
+cd interactive-html
+python cli/ih.py examples
+```
+
+That's it — server, watcher, and agent all start in one supervised
+process. Your browser opens to `http://localhost:5050/sample.html`.
+Highlight text in the page, write a comment, hit Submit. Within seconds
+the page reloads with the change applied and a tour walking you through it.
+
+`Ctrl-C` stops everything. By default the watcher drives `claude -p`
+(Claude Code in headless mode — uses your existing auth, no API key
+needed). [Other agents](#agents) below.
+
+---
+
+## Three ways to drive it
+
+### Claude Code skill — lowest friction
+
+Install once, then in any Claude session, in any folder with HTML:
+
+```bash
+python cli/install_skill.py
+```
+
+Then just ask:
+
+> *"make this page interactive"*
+
+The session **itself** becomes the agent — no separate process, no cold
+start. When you comment, your live Claude session edits the HTML directly.
+If you only have content and no file, say *"make an interactive page from
+this"* and Claude writes the HTML first.
+
+### Cursor — agent-agnostic adapter
+
+```bash
+cp adapters/cursor/interactive-html.mdc .cursor/rules/
+```
+
+In any Cursor chat: *"make this page interactive"*, then *"process new
+comments"* after you submit. See [adapters/cursor/](adapters/cursor/) for
+the workflow note (Cursor lacks Claude Code's idle-monitor primitive).
+
+### Manual — three terminals, full control
+
+```bash
+python cli/inject.py examples         # add the <link>/<script> tags
+python server/server.py examples      # terminal 1: serve
+python cli/watch.py examples          # terminal 2: dispatch to an agent
+```
+
+Same loop as `cli/ih.py`, just unbundled.
+
+---
+
+## What you get
+
+- **Three comment modes**: text selection (highlight prose), element pick
+  (click any region; shift-click to add more), or a general note that
+  isn't anchored anywhere
+- **Live agent status** in the page busy banner: "editing page.html…",
+  "recording the changes…" — fed by SSE from `.ih/progress.json`
+- **Tour on reload**: every change gets a title from the agent and a
+  highlighted region; arrow keys walk through them
+- **Scroll preserved**: leave a comment near the bottom, get the change,
+  stay there
+- **SSE-driven, not polling**: page reacts within ~1s of the agent's last
+  write. A 15s slow-poll runs only as a fallback if SSE drops
+- **Restart-safe**: the watcher tracks processed batch IDs in a cursor
+  file so killing and restarting doesn't replay old comments
+- **Self-contained**: Python standard library, vanilla JS, no `pip
+  install`, no `npm install`, no build step
+
+---
+
+## How it works
+
+```
+       HTML pages                 .ih/comments.jsonl
+           │ inject                       ▲
+           ▼                              │ POST /comments
+   <link>/<script>            comment submitted
+           │                              ▲
+           ▼                              │
+       browser ──── highlight, pick, type ──────┐
+           ▲                                    │
+           │ SSE: 'updates' event               │
+           │                                    ▼
+   server (stdlib HTTP) ◀─── watches .ih/updates.json
+           ▲
+           │ edits HTML, appends .ih/updates.json
+           │
+        agent — Claude Code session, claude -p,
+                Cursor, the bundled urllib agent,
+                or your own
+```
+
+The file contract (`.ih/comments.jsonl` + `.ih/updates.json` +
+`data-ih-change` anchors in the HTML) is the **real product** — see
+[PROTOCOL.md](PROTOCOL.md). Any agent that implements it interoperates
+with this in-page client. The bundled server, JS client, watcher, and
+agents are reference implementations.
+
+---
+
+## Agents
+
+By default the watcher pipes the prompt to `claude -p
+--permission-mode acceptEdits`. To switch:
+
+```bash
+# bundled dependency-free Anthropic agent (needs ANTHROPIC_API_KEY)
+python cli/ih.py --agent builtin
+
+# any other CLI that reads a prompt on stdin and can edit files
+python cli/ih.py --agent-cmd "your-cli --flags"
+
+# no agent — capture comments only (writes to .ih/comments.jsonl for later)
+python cli/ih.py --no-watch
+```
+
+The bundled agent (`agent/agent.py`) talks to the Messages API over
+`urllib` with a four-tool file loop (list, read, edit, write). It writes
+`.ih/progress.json` as it goes, so the in-page busy banner shows live
+status — something `claude -p` doesn't provide.
+
+---
 
 ## Layout
 
 ```
 interactive-html/
-├── PROTOCOL.md       # the spec — what makes this agent-agnostic
+├── PROTOCOL.md       # the file/HTTP contract — implement this and you're done
 ├── LICENSE           # MIT
 ├── client/
-│   ├── ih.js         # injected into every HTML page
+│   ├── ih.js         # injected into every page
 │   └── ih.css
 ├── server/
-│   └── server.py     # stdlib-only HTTP server (+ SSE)
+│   └── server.py     # stdlib HTTP + SSE
 ├── cli/
-│   ├── ih.py         # one-command launcher (inject + serve + watch)
-│   ├── inject.py     # idempotent <link>/<script> injection + removal
-│   ├── watch.py      # tails comments.jsonl and dispatches to an agent
+│   ├── ih.py         # one-command launcher
+│   ├── inject.py     # idempotent tag injection / removal
+│   ├── watch.py      # dispatches new comment batches to an agent
 │   └── install_skill.py   # assemble a self-contained Claude Code skill
 ├── agent/
-│   └── agent.py      # built-in, dependency-free Anthropic tool-use agent
+│   └── agent.py      # bundled Anthropic agent (urllib, no SDK)
 ├── skill/
 │   └── SKILL.md      # Claude Code skill — "make this page interactive"
 ├── adapters/
 │   └── cursor/       # Cursor .mdc rule + install notes
-├── examples/
-│   └── sample.html   # smoke-test page
-└── README.md
+└── examples/
+    └── sample.html
 ```
 
-Everything is Python standard library — no pip install, no build step.
-The built-in agent talks to the Anthropic API over `urllib`, so even that
-needs nothing beyond an API key.
+---
 
-The file contract is the real product. Read [`PROTOCOL.md`](PROTOCOL.md)
-for the spec — any agent (Claude, Cursor, Codex, a local LLM, your own
-script) that implements it interoperates with this in-page client.
+## Recording the demo
 
-## Quickstart
-
-### Inside Claude Code (lowest friction)
-
-Install the skill once, then just ask in any session:
+The magic of this project happens in the browser (highlight → page reload
++ tour), so the canonical demo GIF needs a screen recorder, not a
+terminal recorder. Two recommended paths on macOS:
 
 ```bash
-ln -s "$(pwd)/skill" ~/.claude/skills/interactive-html   # one-time
+# A. macOS native screen capture (⇧⌘5, select the browser window),
+#    convert to GIF with ffmpeg
+ffmpeg -i recording.mov -vf "fps=15,scale=900:-1:flags=lanczos" docs/demo.gif
+
+# B. Kap — free, OSS, native macOS, records straight to GIF
+brew install --cask kap
 ```
 
-> "make this page interactive"
+Drop the result at `docs/demo.gif` and uncomment the `![demo]` line near
+the top of this file.
 
-Claude finds the HTML in your current directory, starts the server, hands
-you the URL, and then **acts as the agent itself** — when you comment in the
-page, the live session edits the HTML and it reloads. No second agent
-process, no cold start. (If you only have content and no file, say "make an
-interactive page from this" and Claude writes the HTML first.)
+---
 
-### One command (manual)
+## Remove the comment layer
 
-```bash
-python cli/ih.py examples       # inject + serve + watch + open browser
-python cli/ih.py                # current directory
-python cli/ih.py --no-watch     # serve + capture comments only (no agent)
-```
-
-This collapses the three steps below into one supervised process; Ctrl-C
-stops everything. It auto-bumps off a busy port and prints every page URL.
-
-### The three pieces, by hand
-
-```bash
-python cli/inject.py examples              # inject client tags
-python server/server.py examples           # terminal 1: serve
-python cli/watch.py examples               # terminal 2: dispatch to an agent
-```
-
-Open the printed URL (e.g. `http://localhost:5050/sample.html`). Comments
-land in `examples/.ih/comments.jsonl`; the watcher hands each new batch to
-the agent, which edits the HTML and appends to `examples/.ih/updates.json`.
-The page reloads (scroll preserved) and walks through each
-`data-ih-change` region.
-
-### Choosing an agent
-
-The watcher can drive two kinds of agent:
-
-```bash
-# default: pipe the prompt into Claude Code headless mode
-python cli/watch.py examples                 # == --agent cli --agent-cmd "claude -p"
-
-# any other CLI that takes a prompt on stdin and can edit files
-python cli/watch.py examples --agent-cmd "your-cli --flags"
-
-# the bundled, dependency-free agent (needs ANTHROPIC_API_KEY)
-export ANTHROPIC_API_KEY=sk-ant-...
-python cli/watch.py examples --agent builtin
-```
-
-The built-in agent (`agent/agent.py`) runs its own Anthropic tool-use loop
-with file tools scoped to the artifact directory. As it works it writes
-`.ih/progress.json`; the server streams that over SSE so the in-page busy
-banner shows live status ("reading sample.html", "recording the changes",
-…). Tune it with `--model` / `IH_AGENT_MODEL`, `--max-iterations`, and
-`--max-tokens`; use `--dry-run` on either the watcher or the agent to
-inspect without calling the API.
-
-To remove the client layer cleanly:
+When you want a clean static copy back:
 
 ```bash
 python cli/inject.py examples --remove
 ```
 
-## How it works
+The `.ih/` directory is left in place; `rm -rf .ih/` if you don't need
+the comment history.
 
-1. `cli/inject.py` adds `<link href="/client/ih.css">` and
-   `<script src="/client/ih.js" defer>` to every page; creates `.ih/comments.jsonl`
-   and `.ih/updates.json` so the server has somewhere to write.
-2. `server/server.py` serves the artifact directory, routes `/client/*` to
-   the sibling `client/` folder, and accepts:
-   - `POST /comments` → appends a batch to `.ih/comments.jsonl`
-   - `POST /_ih/seen` → records which update IDs the user has acknowledged
-   - `GET /_ih/info` → diagnostic JSON
-   - `GET /_ih/events` → Server-Sent Events stream. A background thread
-     watches `.ih/updates.json` and `.ih/progress.json`; when either
-     changes it broadcasts an `updates` or `progress` event.
-3. `client/ih.js` subscribes to `/_ih/events`. On an `updates` event it
-   refetches `.ih/updates.json`; when a new batch responds to one of the
-   user's submitted comment IDs, the page reloads (scroll preserved via
-   sessionStorage) and a walkthrough is offered. A `progress` event updates
-   the busy banner. A 15s poll runs only as a fallback if the SSE channel
-   drops.
+---
 
-The server auto-retires when its parent process dies or after the
-configurable idle timeout (default 10 min, `--idle-timeout 0` disables).
+## Status
 
-### Protocol
+V1, single-author. Used in real iteration loops; not battle-tested at
+team-scale.
 
-**Comments batch** posted to `/comments` and appended to `.ih/comments.jsonl`:
+What's stable:
+- File protocol (`PROTOCOL.md`) — v1, additive changes only
+- HTTP surface — same
+- The bundled server, client, watcher, and Claude Code skill
 
-```json
-{
-  "batch_id": "b-<timestamp>",
-  "client_url": "/sample.html",
-  "submitted_at": "2026-05-28T15:47:10Z",
-  "comments": [
-    {
-      "id": "c-<timestamp>",
-      "kind": "text" | "element" | "general",
-      "anchor": {
-        "selector": "...",
-        "ih_id": "n3",
-        "tag": "P",
-        "quote": "first 220 chars",
-        "html_snippet": "outerHTML truncated"
-      },
-      "body": "what the user wrote",
-      "created_at": "ISO 8601"
-    }
-  ]
-}
-```
+What's on the roadmap (and where contributions land cleanly):
+- Comment threads (replies, resolved/unresolved)
+- Multi-user presence over the existing SSE channel
+- More agent adapters (Codex, Gemini CLI, local models)
+- Single-shot built-in agent (cut the agent loop to one API call for
+  small edits)
 
-The server adds `received_at` (epoch seconds) and `received_iso` before
-writing.
+Issues and PRs welcome. The protocol is the contract — anything that
+respects it is fair game.
 
-**Updates** are appended to `.ih/updates.json` (single JSON array, newest
-last). Each entry looks like:
+---
 
-```json
-{
-  "batch_id": "u-<id>",
-  "timestamp": "2026-05-28T15:48:00Z",
-  "in_response_to_batch": "b-...",
-  "changes": [
-    {
-      "id": "ch-<slug>",
-      "anchor": "ch-<slug>",
-      "in_response_to": ["c-..."],
-      "title": "short label",
-      "description": "longer prose"
-    }
-  ]
-}
-```
+## License
 
-The agent wraps each modified region with
-`<span data-ih-change="ch-<slug>">…</span>` (or adds the attribute to an
-existing wrapping element). The client uses those anchors to walk through
-the tour.
-
-## Keyboard
-
-- <kbd>E</kbd> — toggle element picker
-- <kbd>R</kbd> — dismiss post-reload tour
-- <kbd>Esc</kbd> — close any open popover
-- <kbd>?</kbd> — show key hints
-- <kbd>Cmd/Ctrl + Enter</kbd> in the editor — save the draft
-- <kbd>←</kbd> / <kbd>→</kbd> in tour — step
+[MIT](LICENSE). Use it however you want.
