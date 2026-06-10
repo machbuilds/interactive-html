@@ -9,6 +9,8 @@ a short tour of what changed.
 
 ```
 interactive-html/
+├── PROTOCOL.md       # the spec — what makes this agent-agnostic
+├── LICENSE           # MIT
 ├── client/
 │   ├── ih.js         # injected into every HTML page
 │   └── ih.css
@@ -17,20 +19,26 @@ interactive-html/
 ├── cli/
 │   ├── ih.py         # one-command launcher (inject + serve + watch)
 │   ├── inject.py     # idempotent <link>/<script> injection + removal
-│   └── watch.py      # tails comments.jsonl and dispatches to an agent
+│   ├── watch.py      # tails comments.jsonl and dispatches to an agent
+│   └── install_skill.py   # assemble a self-contained Claude Code skill
 ├── agent/
 │   └── agent.py      # built-in, dependency-free Anthropic tool-use agent
 ├── skill/
 │   └── SKILL.md      # Claude Code skill — "make this page interactive"
+├── adapters/
+│   └── cursor/       # Cursor .mdc rule + install notes
 ├── examples/
 │   └── sample.html   # smoke-test page
-├── README.md
-└── .gitignore
+└── README.md
 ```
 
 Everything is Python standard library — no pip install, no build step.
 The built-in agent talks to the Anthropic API over `urllib`, so even that
 needs nothing beyond an API key.
+
+The file contract is the real product. Read [`PROTOCOL.md`](PROTOCOL.md)
+for the spec — any agent (Claude, Cursor, Codex, a local LLM, your own
+script) that implements it interoperates with this in-page client.
 
 ## Quickstart
 

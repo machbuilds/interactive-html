@@ -1,0 +1,122 @@
+---
+description: Use Interactive HTML — turn static HTML pages in this project into a live commenting surface and respond to comments by editing the HTML.
+globs:
+alwaysApply: false
+---
+
+# Interactive HTML — Cursor adapter
+
+Drop this rule into any project's `.cursor/rules/` and ask Cursor:
+
+> "make this page interactive"
+>
+> "process new comments"
+>
+> "stop the interactive server"
+
+You become the agent for the Interactive HTML loop: the user comments in the
+page; you read the comments, edit the HTML, and append a response.
+
+## Setup flow
+
+When the user asks to make a page interactive:
+
+1. Identify the target directory — default to the current workspace root.
+   If the user names a folder, use that. If it has no `*.html`, offer to
+   create one from their content.
+
+2. Start the server only (no separate agent — you are the agent). Run this
+   in a background terminal:
+
+   ```bash
+   python <IH_HOME>/cli/ih.py <dir> --no-watch --no-open
+   ```
+
+   Replace `<IH_HOME>` with the path where you installed
+   `github.com/machbuilds/interactive-html`. The launcher auto-bumps off a
+   busy port; capture the URL it prints.
+
+3. Tell the user the page URL(s).
+
+4. **Wait for the user to submit a comment.** The browser writes to
+   `<dir>/.ih/comments.jsonl`. When the user says "process new comments"
+   (or you observe a new batch), go to **Responding to a batch**.
+
+> Note: Cursor doesn't have a "Monitor file" tool the way Claude Code does,
+> so you can't sit idle watching the inbox. The pattern is: user submits,
+> then asks you to process — one short turn per round.
+
+## Responding to a batch
+
+When the user asks you to process new comments (or when you read
+`<dir>/.ih/comments.jsonl` and find an unhandled `batch_id`):
+
+1. Read the latest unprocessed line(s) in `<dir>/.ih/comments.jsonl`. Each
+   comment has a stable `id`, a `kind` (`text` / `element` / `general`),
+   and an `anchor` with a CSS `selector`, `tag`, `quote`, and
+   `html_snippet`. **Locate elements by visible text or `html_snippet`**,
+   not by selector alone.
+
+2. Read `<dir>/.ih/updates.json` to see what's already been handled — the
+   union of `changes[*].in_response_to` is the set of resolved comment ids.
+
+3. Edit the relevant `*.html` file(s) to address each new comment. Keep
+   edits minimal and focused on what was asked.
+
+4. Wrap each logical change in `<span data-ih-change="ch-<slug>">…</span>`,
+   or add `data-ih-change="ch-<slug>"` to an existing wrapping element.
+   Exactly one anchor per change.
+
+5. **Append** one batch object to `<dir>/.ih/updates.json` (it's a JSON
+   array — read, push, write back). Schema:
+
+   ```json
+   {
+     "batch_id": "u-<short-slug>",
+     "timestamp": "<ISO 8601 UTC>",
+     "in_response_to_batch": "<batch_id from the inbox>",
+     "changes": [
+       {
+         "id": "ch-<slug>",
+         "anchor": "ch-<slug>",
+         "in_response_to": ["<comment id>"],
+         "title": "short, concrete label",
+         "description": "one or two sentences for the record"
+       }
+     ]
+   }
+   ```
+
+The server detects the update and pushes an SSE event; the page reloads
+(scroll preserved) and walks the user through the changes via the
+`data-ih-change` anchors.
+
+## Rules
+
+- Edit only `*.html` files and `.ih/updates.json`.
+- Every `id` in updates.json must have a matching `data-ih-change` in the
+  HTML, and every new `data-ih-change` must appear in updates.json.
+- `comments.jsonl` is append-only — never modify existing lines.
+
+## Stop flow
+
+```bash
+lsof -ti:<port> | xargs kill
+```
+
+The server also self-retires on parent-death and after the configured idle
+timeout, so simply closing the terminal cleans it up.
+
+## Removal flow
+
+Strip the client tags for a clean static copy:
+
+```bash
+python <IH_HOME>/cli/inject.py <dir> --remove
+```
+
+## Protocol reference
+
+The file formats and HTTP surface are documented at
+`PROTOCOL.md` in the Interactive HTML repo. Anything not covered here is
+covered there.
