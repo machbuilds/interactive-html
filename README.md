@@ -98,20 +98,32 @@ Same loop as `cli/ih.py`, just unbundled.
 
 ## How it works
 
-A five-step loop. Each round trip takes a few seconds.
+One loop, a few seconds per round trip:
 
-1. **You** highlight text (or pick an element) in the page and type a comment.
-2. **The page** POSTs the comment to a tiny local server, which appends it to `.ih/comments.jsonl`.
-3. **Your agent** reads the new line, edits the relevant HTML file, and appends to `.ih/updates.json` describing what changed.
-4. **The server** detects the file change and pushes an SSE event to the page.
-5. **The page** reloads (scroll preserved) and walks you through every change — highlighted, with the title the agent gave it.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant Page as 🌐 Page
+    participant Server as ⚡ Server
+    participant Agent as 🤖 Agent
 
+    You->>Page: highlight text, write a comment
+    Page->>Server: POST /comments
+    Server->>Agent: new entry in .ih/comments.jsonl
+    Agent->>Agent: edits the HTML
+    Agent->>Server: appends .ih/updates.json
+    Server-->>Page: SSE: "updates"
+    Page->>You: reloads + tour of what changed
 ```
-   you ──comment──▶ page ──POST──▶ server ──notifies──▶ agent
-    ▲                                                     │
-    │      reload + tour  (via SSE on file change)        │  edits HTML
-    └─────────────────────────────────────────────────────┘  writes updates.json
-```
+
+| | Who | What happens |
+|---|---|---|
+| 💬 | **You** | Highlight prose, pick an element, or leave a note — then Submit |
+| 📥 | **Page → Server** | Comment lands in `.ih/comments.jsonl` |
+| ✏️ | **Agent** | Reads it, edits the HTML, records changes in `.ih/updates.json` |
+| 🔔 | **Server → Page** | SSE event the instant the file changes |
+| ✨ | **Page → You** | Auto-reload (scroll preserved) + guided tour of every change |
 
 The file contract (`.ih/comments.jsonl` + `.ih/updates.json` +
 `data-ih-change` anchors in the HTML) is the **real product** — see
