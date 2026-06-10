@@ -98,24 +98,19 @@ Same loop as `cli/ih.py`, just unbundled.
 
 ## How it works
 
+A five-step loop. Each round trip takes a few seconds.
+
+1. **You** highlight text (or pick an element) in the page and type a comment.
+2. **The page** POSTs the comment to a tiny local server, which appends it to `.ih/comments.jsonl`.
+3. **Your agent** reads the new line, edits the relevant HTML file, and appends to `.ih/updates.json` describing what changed.
+4. **The server** detects the file change and pushes an SSE event to the page.
+5. **The page** reloads (scroll preserved) and walks you through every change — highlighted, with the title the agent gave it.
+
 ```
-       HTML pages                 .ih/comments.jsonl
-           │ inject                       ▲
-           ▼                              │ POST /comments
-   <link>/<script>            comment submitted
-           │                              ▲
-           ▼                              │
-       browser ──── highlight, pick, type ──────┐
-           ▲                                    │
-           │ SSE: 'updates' event               │
-           │                                    ▼
-   server (stdlib HTTP) ◀─── watches .ih/updates.json
-           ▲
-           │ edits HTML, appends .ih/updates.json
-           │
-        agent — Claude Code session, claude -p,
-                Cursor, the bundled urllib agent,
-                or your own
+   you ──comment──▶ page ──POST──▶ server ──notifies──▶ agent
+    ▲                                                     │
+    │      reload + tour  (via SSE on file change)        │  edits HTML
+    └─────────────────────────────────────────────────────┘  writes updates.json
 ```
 
 The file contract (`.ih/comments.jsonl` + `.ih/updates.json` +
