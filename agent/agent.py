@@ -56,13 +56,20 @@ changed.
 You have file tools scoped to the current working directory. Use them to:
   1. Find the elements referenced by each comment (match on the visible text
      or html_snippet — never rely on data-* attributes that may be assigned
-     at runtime).
-  2. Make the minimal edits that address each comment.
+     at runtime). Comments with kind "region" carry anchor.multi (several
+     selectors) and anchor.region (a drawn rectangle): treat the set as the
+     target area.
+  2. Honor each comment's intent. intent "change" (or absent): make the
+     minimal edits that address it. intent "question": do NOT edit the page —
+     answer it in the update's "answers" array instead, concretely, citing
+     the relevant part of the page.
   3. Wrap each logical change in <span data-ih-change="ch-<slug>">…</span>, or
      add a data-ih-change attribute to an existing wrapping element. Exactly
-     one anchor per change.
+     one anchor per change. Answers need no anchor in the HTML.
   4. Append a single batch object to .ih/updates.json (it is a JSON array —
-     read it, append, write the whole array back).
+     read it, append, write the whole array back). Changes go in "changes";
+     question replies go in "answers": [{id: "a-<slug>", in_response_to:
+     ["<comment id>"], text: "..."}]. Omit either key when empty.
 
 Work autonomously: do not ask questions, do not start servers, edit only HTML
 files and .ih/updates.json. When everything is done and updates.json is

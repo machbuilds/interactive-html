@@ -68,12 +68,18 @@ A conforming server MAY expose:
   "comments": [
     {
       "id": "c-mq0mch83-c0ypn",          // unique, client-generated
-      "kind": "text",                    // "text" | "element" | "general"
+      "kind": "text",                    // "text" | "element" | "region" | "general"
+      "intent": "change",                // "change" | "question" (absent = "change")
       "anchor": {                        // null for kind="general"
         "selector": "body > h2:nth-of-type(1)",       // CSS selector
         "tag": "H2",
         "quote": "Three ways to leave a comment",     // visible text, ≤220 chars
-        "html_snippet": "<h2>Three ways to leave a comment</h2>"  // ≤600 chars
+        "html_snippet": "<h2>Three ways to leave a comment</h2>",  // ≤600 chars
+        "multi": ["body > p:nth-of-type(2)", "…"],    // kind="region" only:
+                                                       // every circled element
+        "region": { "x": 0, "y": 0, "width": 0, "height": 0 }  // kind="region"
+                                                       // only: drawn rectangle,
+                                                       // page coordinates
       },
       "body": "change this to 2 ways",
       "created_at": "2026-06-07T13:14:30Z"
@@ -106,10 +112,28 @@ after each append.
         "title": "Renamed heading",
         "description": "Changed 'Three ways' to '2 ways' as requested."
       }
+    ],
+    "answers": [
+      {
+        "id": "a-why-three",
+        "in_response_to": ["c-somequestion"],
+        "text": "Plain-prose reply to a comment with intent=question."
+      }
     ]
   }
 ]
 ```
+
+`changes` and `answers` are both optional — omit whichever is empty. An
+update containing only `answers` means the HTML was not modified: the
+client surfaces the answers in place (Q&A tab + anchored highlight)
+without reloading the page.
+
+**Questions.** A comment with `intent: "question"` is a request for an
+explanation, not an edit. Agents MUST reply via `answers` and MUST NOT
+modify the page for it (unless the question itself also asks for an
+edit). This turns reading friction — "I don't understand this part" —
+into an in-page Q&A loop with zero copy-paste.
 
 For every `change`, the corresponding HTML edit MUST embed a matching
 `data-ih-change` attribute somewhere in the page:

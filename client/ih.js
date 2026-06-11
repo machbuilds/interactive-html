@@ -95,11 +95,16 @@
     sseConnected: false,
     pollTimer: null,
     elementMode: false,
+    regionMode: false,
+    regionDrag: null,            // {x0,y0} while drawing
     picked: [],
     savedTextRange: null,
     activeEditor: null,
     busySince: null,
     submitted: loadState().submitted || null, // { batch_id, comment_ids, sent_at }
+    // Questions we've submitted, kept so the Q&A tab can show the question
+    // text next to the agent's answer (answers only reference comment ids).
+    questions: loadState().questions || [],   // [{id, body, anchor, asked_at}]
     sawFirstHistory: false,
   };
 
@@ -175,6 +180,10 @@
          <span class="ih-editor-kind" id="ih-editor-kind">Comment</span>
          <span id="ih-editor-where"></span>
        </div>
+       <div class="ih-intent" id="ih-intent" role="radiogroup" aria-label="Comment intent">
+         <button data-intent="change" class="is-active" aria-pressed="true">&#9998; Change</button>
+         <button data-intent="question" aria-pressed="false">? Question</button>
+       </div>
        <div class="ih-editor-quote" id="ih-editor-quote" hidden></div>
        <div class="ih-editor-body">
          <textarea id="ih-editor-text" placeholder="What should change?" rows="3"></textarea>
@@ -193,14 +202,19 @@
       </div>
       <div class="ih-tabs">
         <button class="ih-tab is-active" data-tab="queue" id="ih-tab-queue">Queue</button>
+        <button class="ih-tab" data-tab="qa" id="ih-tab-qa">Q&amp;A</button>
         <button class="ih-tab" data-tab="history" id="ih-tab-history">History</button>
       </div>
       <div class="ih-tab-body" id="ih-tab-body-queue">
         <div class="ih-tab-toolbar">
           <button id="ih-toggle-elem">⌖ Element picker</button>
+          <button id="ih-toggle-region">▭ Region</button>
           <button id="ih-add-general">+ General</button>
         </div>
         <div id="ih-pending-list"></div>
+      </div>
+      <div class="ih-tab-body" id="ih-tab-body-qa" hidden>
+        <div id="ih-qa-list"></div>
       </div>
       <div class="ih-tab-body" id="ih-tab-body-history" hidden>
         <div id="ih-history-list"></div>
@@ -225,28 +239,39 @@
     // Toast
     const toast = make("div", { class: "ih-toast", id: "ih-toast" });
 
-    host.append(launcher, busy, selpop, elempop, editor, panel, tour, toast);
+    // Region-draw overlay: a fixed full-viewport layer that captures the
+    // drag, plus the live rectangle drawn inside it.
+    const regionOverlay = make("div", { class: "ih-region-overlay", id: "ih-region-overlay", hidden: true },
+      `<div class="ih-region-rect" id="ih-region-rect" hidden></div>`);
+
+    host.append(launcher, busy, selpop, elempop, editor, panel, tour, toast, regionOverlay);
     document.body.appendChild(host);
 
     dom = {
       host, launcher, busy, selpop, elempop, editor, panel, tour, toast,
+      regionOverlay,
+      regionRect: $("ih-region-rect"),
       badge: $("ih-badge"),
       busyText: $("ih-busy-text"),
       editorKind: $("ih-editor-kind"),
       editorWhere: $("ih-editor-where"),
       editorQuote: $("ih-editor-quote"),
       editorText: $("ih-editor-text"),
+      intentGroup: $("ih-intent"),
       pendingList: $("ih-pending-list"),
       historyList: $("ih-history-list"),
+      qaList: $("ih-qa-list"),
       pendingCount: $("ih-pending-count"),
       tourTitle: $("ih-tour-title"),
       tourStep: $("ih-tour-step"),
       tabBodies: {
         queue: $("ih-tab-body-queue"),
+        qa: $("ih-tab-body-qa"),
         history: $("ih-tab-body-history"),
       },
       tabs: {
         queue: $("ih-tab-queue"),
+        qa: $("ih-tab-qa"),
         history: $("ih-tab-history"),
       },
     };
@@ -350,12 +375,121 @@
     showElementPopover(rect);
   };
 
+  // -- region-draw mode -----------------------------------------------------
+  // For "I can't describe where, but it's THIS area": drag a rectangle and
+  // we resolve it to the underlying elements, so the agent gets precise
+  // anchors even when the user's words are vague.
+  const setRegionMode = (on) => {
+    state.regionMode = on;
+    state.regionDrag = null;
+    dom.regionOverlay.hidden = !on;
+    dom.regionRect.hidden = true;
+    $("ih-toggle-region").classList.toggle("ih-primary", on);
+    if (on) {
+      toast("Drag a box around the area you want to talk about. Esc to cancel.");
+    }
+  };
+
+  const regionPoint = (e) => ({ x: e.clientX, y: e.clientY });
+
+  const onRegionDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    state.regionDrag = regionPoint(e);
+    dom.regionRect.hidden = false;
+    drawRegionRect(state.regionDrag, state.regionDrag);
+  };
+
+  const onRegionMove = (e) => {
+    if (!state.regionDrag) return;
+    drawRegionRect(state.regionDrag, regionPoint(e));
+  };
+
+  const drawRegionRect = (a, b) => {
+    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+    const w = Math.abs(a.x - b.x), h = Math.abs(a.y - b.y);
+    Object.assign(dom.regionRect.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+  };
+
+  const onRegionUp = (e) => {
+    if (!state.regionDrag) return;
+    const a = state.regionDrag, b = regionPoint(e);
+    state.regionDrag = null;
+    const rect = {
+      x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+      width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y),
+    };
+    if (rect.width < 8 || rect.height < 8) { dom.regionRect.hidden = true; return; }
+    const targets = elementsInRect(rect);
+    if (!targets.length) {
+      dom.regionRect.hidden = true;
+      toast("Nothing recognizable in that area — try a bigger box");
+      return;
+    }
+    const anchors = targets.map(captureAnchor);
+    const primary = anchors[0];
+    openEditor({
+      kind: "region",
+      anchor: {
+        ...primary,
+        multi: anchors.map((x) => x.selector),
+        region: {
+          // page coordinates so the agent (and future sessions) can reason
+          // about it independent of current scroll position
+          x: rect.x + window.scrollX,
+          y: rect.y + window.scrollY,
+          width: rect.width,
+          height: rect.height,
+        },
+      },
+      near: { left: rect.x, bottom: rect.y + rect.height, top: rect.y },
+      prefillQuote: primary.quote,
+    });
+  };
+
+  // Resolve a viewport rect to the most specific pickable elements inside it:
+  // keep elements that overlap the rect, then drop any element whose
+  // descendant is also selected (prefer the paragraph over its section).
+  const elementsInRect = (rect) => {
+    const hits = [];
+    document.querySelectorAll("body *").forEach((el) => {
+      if (elementInsideOurUI(el)) return;
+      if (!PICKABLE_TAGS.has(el.tagName)) return;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const ox = Math.max(0, Math.min(rect.x + rect.width, r.right) - Math.max(rect.x, r.left));
+      const oy = Math.max(0, Math.min(rect.y + rect.height, r.bottom) - Math.max(rect.y, r.top));
+      const overlap = ox * oy;
+      if (overlap <= 0) return;
+      // Require meaningful overlap: ≥40% of the element OR ≥40% of the rect.
+      const elArea = r.width * r.height;
+      const rectArea = rect.width * rect.height;
+      if (overlap >= 0.4 * elArea || overlap >= 0.4 * rectArea) hits.push(el);
+    });
+    const leafmost = hits.filter((el) => !hits.some((other) => other !== el && el.contains(other)));
+    return leafmost.slice(0, 8);
+  };
+
   // -- editor -------------------------------------------------------------
-  const openEditor = ({ kind, anchor, near, prefillQuote }) => {
+  const setEditorIntent = (intent) => {
+    if (!state.activeEditor) return;
+    state.activeEditor.intent = intent;
+    dom.intentGroup.querySelectorAll("button").forEach((b) => {
+      const on = b.dataset.intent === intent;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    dom.editorText.placeholder = intent === "question"
+      ? "What do you want to know about this?"
+      : "What should change?";
+  };
+
+  const openEditor = ({ kind, anchor, near, prefillQuote, intent }) => {
     closeEditor();
-    state.activeEditor = { kind, anchor };
-    dom.editorKind.textContent = kind === "general" ? "General" : kind === "element" ? "Element" : "Text";
-    dom.editorWhere.textContent = anchor ? `· ${anchor.tag.toLowerCase()}` : "";
+    state.activeEditor = { kind, anchor, intent: "change" };
+    const kindLabel = { general: "General", element: "Element", region: "Region", text: "Text" }[kind] || "Text";
+    dom.editorKind.textContent = kindLabel;
+    dom.editorWhere.textContent = anchor && anchor.tag ? `· ${anchor.tag.toLowerCase()}` : "";
     if (prefillQuote) {
       dom.editorQuote.hidden = false;
       dom.editorQuote.textContent = `"${prefillQuote}"`;
@@ -364,6 +498,7 @@
       dom.editorQuote.textContent = "";
     }
     dom.editorText.value = "";
+    setEditorIntent(intent || "change");
     positionEditor(near);
     dom.editor.classList.add("is-visible");
     setTimeout(() => dom.editorText.focus(), 30);
@@ -397,6 +532,7 @@
     const comment = {
       id: newId("c"),
       kind: ed.kind,
+      intent: ed.intent || "change",
       anchor: ed.anchor,
       body,
       created_at: new Date().toISOString(),
@@ -411,10 +547,11 @@
       hideElementPopover();
       clearPicked();
     }
+    if (state.regionMode) setRegionMode(false);
     window.getSelection().removeAllRanges();
     setPanelOpen(true);
     setActiveTab("queue");
-    toast("Added to queue");
+    toast(comment.intent === "question" ? "Question queued" : "Added to queue");
   };
 
   // -- pending list rendering --------------------------------------------
@@ -435,7 +572,7 @@
     const item = make("div", { class: "ih-item" });
     item.innerHTML = `
       <div class="ih-item-head">
-        <span class="ih-item-kind">${escapeHTML(c.kind)}</span>
+        <span class="ih-item-kind">${c.intent === "question" ? "? " : ""}${escapeHTML(c.kind)}</span>
         <span class="ih-item-time">${escapeHTML(relTime(c.created_at))}</span>
       </div>
       ${c.anchor && c.anchor.quote ? `<span class="ih-item-quote">"${escapeHTML(c.anchor.quote)}"</span>` : ""}
@@ -498,7 +635,14 @@
       comment_ids: batch.comments.map((c) => c.id),
       sent_at: Date.now(),
     };
-    saveState({ submitted: state.submitted });
+    // Remember question text locally — answers reference comment ids only.
+    const asked = batch.comments
+      .filter((c) => c.intent === "question")
+      .map((c) => ({ id: c.id, body: c.body, anchor: c.anchor, asked_at: c.created_at }));
+    if (asked.length) {
+      state.questions = [...state.questions, ...asked].slice(-100);
+    }
+    saveState({ submitted: state.submitted, questions: state.questions });
     try {
       const res = await fetch(COMMENTS_URL, {
         method: "POST",
@@ -581,6 +725,7 @@
   const handleUpdates = (updates) => {
     state.history = updates;
     renderHistory();
+    renderQA();
 
     const firstPass = !state.sawFirstHistory;
     const newIds = [];
@@ -604,14 +749,23 @@
       }
     }
 
-    // If any new update responds to the submitted batch, prepare to reload.
+    // If any new update responds to the submitted batch, react. Updates with
+    // HTML changes reload the page (the file on disk changed); answer-only
+    // updates surface in place — there's nothing to reload.
     if (state.submitted) {
       const matchedNow = updates.find((u) => responsesMatch(u, state.submitted.comment_ids));
       if (matchedNow && newIds.includes(matchedNow.batch_id || matchedNow.id)) {
         saveState({ submitted: null });
         state.submitted = null;
-        reloadWithTour(matchedNow);
-        return;
+        if ((matchedNow.changes || []).length) {
+          reloadWithTour(matchedNow);
+          return;
+        }
+        setBusy(false);
+        const n = (matchedNow.answers || []).length;
+        toast(`${n} question${n === 1 ? "" : "s"} answered`);
+        setPanelOpen(true);
+        setActiveTab("qa");
       }
     } else if (newIds.length) {
       toast(`${newIds.length} new update${newIds.length > 1 ? "s" : ""}`);
@@ -619,9 +773,10 @@
   };
 
   const responsesMatch = (update, commentIds) => {
-    if (!update || !Array.isArray(update.changes)) return false;
+    if (!update) return false;
     const replied = new Set();
-    update.changes.forEach((ch) => (ch.in_response_to || []).forEach((id) => replied.add(id)));
+    (update.changes || []).forEach((ch) => (ch.in_response_to || []).forEach((id) => replied.add(id)));
+    (update.answers || []).forEach((a) => (a.in_response_to || []).forEach((id) => replied.add(id)));
     return commentIds.some((id) => replied.has(id));
   };
 
@@ -683,6 +838,62 @@
     dom.tour.classList.add("is-visible");
   };
 
+  // -- Q&A rendering --------------------------------------------------------
+  // Joins answers in history (which reference comment ids) with the question
+  // text we stored locally at submit time.
+  const collectQA = () => {
+    const answersById = new Map(); // comment id -> {text, timestamp}
+    state.history.forEach((u) => {
+      (u.answers || []).forEach((a) => {
+        (a.in_response_to || []).forEach((cid) => {
+          answersById.set(cid, { text: a.text || "", timestamp: u.timestamp || "" });
+        });
+      });
+    });
+    return state.questions.map((q) => ({
+      question: q,
+      answer: answersById.get(q.id) || null,
+    }));
+  };
+
+  const renderQA = () => {
+    const list = dom.qaList;
+    if (!list) return;
+    list.innerHTML = "";
+    const items = collectQA();
+    if (!items.length) {
+      list.appendChild(make("div", { class: "ih-empty" },
+        "No questions yet. Open the comment editor on any text or element and switch to “? Question”."));
+      return;
+    }
+    for (let i = items.length - 1; i >= 0; i--) {
+      const { question, answer } = items[i];
+      const node = make("div", { class: "ih-item ih-qa-item" });
+      node.innerHTML = `
+        <div class="ih-item-head">
+          <span class="ih-item-kind">? question</span>
+          <span class="ih-item-time">${escapeHTML(relTime(question.asked_at))}</span>
+        </div>
+        ${question.anchor && question.anchor.quote ? `<span class="ih-item-quote">"${escapeHTML(question.anchor.quote)}"</span>` : ""}
+        <div class="ih-item-body">${escapeHTML(question.body)}</div>
+        ${answer
+          ? `<div class="ih-qa-answer">${escapeHTML(answer.text)}</div>`
+          : `<div class="ih-qa-answer ih-qa-waiting">Waiting for an answer…</div>`}
+        <div class="ih-item-actions">
+          ${question.anchor && question.anchor.selector ? `<button data-act="locate">Find</button>` : ""}
+          <button data-act="dismiss">Dismiss</button>
+        </div>`;
+      const findBtn = node.querySelector('[data-act="locate"]');
+      if (findBtn) findBtn.addEventListener("click", () => locateAnchor(question.anchor));
+      node.querySelector('[data-act="dismiss"]').addEventListener("click", () => {
+        state.questions = state.questions.filter((q) => q.id !== question.id);
+        saveState({ questions: state.questions });
+        renderQA();
+      });
+      list.appendChild(node);
+    }
+  };
+
   // -- history rendering --------------------------------------------------
   const renderHistory = () => {
     const list = dom.historyList;
@@ -726,6 +937,7 @@
       hideSelectionPopover();
       if (tour.active) exitTour();
       if (state.elementMode) setElementMode(false);
+      if (state.regionMode) setRegionMode(false);
       return;
     }
     if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
@@ -752,11 +964,24 @@
     $("ih-panel-close").addEventListener("click", () => setPanelOpen(false));
 
     dom.tabs.queue.addEventListener("click", () => setActiveTab("queue"));
+    dom.tabs.qa.addEventListener("click", () => setActiveTab("qa"));
     dom.tabs.history.addEventListener("click", () => setActiveTab("history"));
 
     $("ih-toggle-elem").addEventListener("click", () => setElementMode(!state.elementMode));
+    $("ih-toggle-region").addEventListener("click", () => {
+      if (state.elementMode) setElementMode(false);
+      setRegionMode(!state.regionMode);
+    });
     $("ih-add-general").addEventListener("click", () => {
       openEditor({ kind: "general", anchor: null, near: null });
+    });
+
+    dom.regionOverlay.addEventListener("mousedown", onRegionDown);
+    dom.regionOverlay.addEventListener("mousemove", onRegionMove);
+    dom.regionOverlay.addEventListener("mouseup", onRegionUp);
+
+    dom.intentGroup.querySelectorAll("button").forEach((b) => {
+      b.addEventListener("click", () => setEditorIntent(b.dataset.intent));
     });
 
     $("ih-submit").addEventListener("click", submitBatch);
@@ -864,6 +1089,7 @@
     renderPending();
     updateBadge();
     renderHistory();
+    renderQA();
     startEvents();
     consumePostReloadTour();
 

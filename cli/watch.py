@@ -51,19 +51,24 @@ A reader of the page just submitted this batch of comments:
 {batch_json}
 
 YOUR JOB
-1. For each comment in `comments`, locate the element it refers to. Use
-   `anchor.html_snippet` and `anchor.quote` to find it — do NOT search by
-   `anchor.selector` if it includes `data-ih-id`, because those attributes
-   are assigned client-side and are not persisted to disk. Match on the
-   visible text or the html_snippet instead.
-2. Edit the relevant .html file(s) to address each comment. Keep changes
-   minimal and focused on what the comment asked for.
-3. For each logical change, wrap the modified region in
-   `<span data-ih-change="ch-<slug>">…</span>`, OR add a `data-ih-change`
-   attribute to an existing wrapping element. Exactly one anchor per change.
-4. When all edits are done, append a SINGLE batch object to
-   `.ih/updates.json`. That file is a JSON array — read it, append your
-   new entry to the end, and write the whole array back. Schema:
+1. For each comment in `comments`, locate the element it refers to. Match on
+   `anchor.quote` (visible text) and `anchor.html_snippet` — do not rely on
+   the CSS selector alone. A comment with `kind: "region"` carries
+   `anchor.multi` (selectors of every element the user circled) and
+   `anchor.region` (the drawn rectangle in page coordinates) — treat the
+   whole set as the target area.
+2. Check each comment's `intent`:
+   - `"change"` (or missing): edit the relevant .html file(s). Keep changes
+     minimal and focused on what the comment asked for. Wrap each logical
+     change in `<span data-ih-change="ch-<slug>">…</span>`, OR add a
+     `data-ih-change` attribute to an existing wrapping element. Exactly
+     one anchor per change.
+   - `"question"`: do NOT edit the page. Answer it in the `answers` array of
+     your update (schema below). Be concrete; cite the relevant part of the
+     page in your answer.
+3. When done, append a SINGLE batch object to `.ih/updates.json`. That file
+   is a JSON array — read it, append your new entry to the end, and write
+   the whole array back. Schema (omit `changes` or `answers` when empty):
 
    {{
      "batch_id": "u-<short slug>",
@@ -77,15 +82,24 @@ YOUR JOB
          "title": "short label of what changed",
          "description": "one or two sentences on what changed and why"
        }}
+     ],
+     "answers": [
+       {{
+         "id": "a-<slug>",
+         "in_response_to": ["<comment id of the question>"],
+         "text": "your answer, plain prose"
+       }}
      ]
    }}
 
 RULES
 - Edit only .html files and `.ih/updates.json`. Do not touch
   `.ih/comments.jsonl` or other files.
-- Every `id` you list in updates.json must have a matching
+- Every `id` you list under `changes` must have a matching
   `data-ih-change` somewhere in the HTML, and every new `data-ih-change`
-  must be listed in updates.json.
+  must be listed in updates.json. Answers need no HTML anchor.
+- Questions never modify the page unless the question explicitly asks for
+  an edit too.
 - Do not start any servers or background processes.
 - Do not ask follow-up questions; do the work and finish.
 """

@@ -63,12 +63,21 @@ IH_HOME = __IH_HOME__
 When a new line appears in `<dir>/.ih/comments.jsonl`:
 
 - Read the new batch. Each comment has a stable `id`, a `kind`
-  (`text` / `element` / `general`), and an `anchor` with a CSS `selector`,
-  `tag`, `quote`, and `html_snippet`. **Locate the element by its visible text
+  (`text` / `element` / `region` / `general`), an `intent`
+  (`change` / `question`), and an `anchor` with a CSS `selector`, `tag`,
+  `quote`, and `html_snippet`. **Locate the element by its visible text
   or `html_snippet`** — match on content, not on runtime-only attributes.
+  `kind: "region"` comments add `anchor.multi` (selectors for every element
+  the user circled) and `anchor.region` (the drawn rectangle, page
+  coordinates) — treat the set as the target area.
 
-- Edit the relevant `*.html` file(s) to address each comment. Keep edits
-  minimal and focused on what was asked.
+- **`intent: "question"` comments are questions, not edit requests.** Do
+  NOT modify the page for them. Answer in the update's `answers` array
+  (schema below) — concretely, citing the relevant part of the page. The
+  client shows your answer in its Q&A tab, anchored to where they asked.
+
+- For `intent: "change"` comments, edit the relevant `*.html` file(s).
+  Keep edits minimal and focused on what was asked.
 
 - Wrap each logical change in `<span data-ih-change="ch-<slug>">…</span>`, or
   add a `data-ih-change="ch-<slug>"` attribute to an existing wrapping element.
@@ -90,18 +99,32 @@ When a new line appears in `<dir>/.ih/comments.jsonl`:
         "title": "short, concrete label",
         "description": "one or two sentences for the record"
       }
+    ],
+    "answers": [
+      {
+        "id": "a-<slug>",
+        "in_response_to": ["<comment id of the question>"],
+        "text": "your answer, plain prose"
+      }
     ]
   }
   ```
 
+  Omit `changes` or `answers` when empty. An answers-only update doesn't
+  reload the page — the client surfaces it in the Q&A tab in place.
+
 The server detects the write and pushes an SSE event; the page reloads with
-scroll preserved and offers a tour. The page's busy banner clears when a
-change's `in_response_to` matches a submitted comment id.
+scroll preserved and offers a tour (or, for answers-only updates, shows the
+Q&A tab without reloading). The page's busy banner clears when a change's or
+answer's `in_response_to` matches a submitted comment id.
 
 Rules:
 - Edit only HTML files and `.ih/updates.json`.
-- Every `id` in updates.json must have a matching `data-ih-change` in the HTML,
-  and every new `data-ih-change` must appear in updates.json.
+- Every `id` under `changes` must have a matching `data-ih-change` in the HTML,
+  and every new `data-ih-change` must appear in updates.json. Answers need no
+  HTML anchor.
+- Questions never modify the page unless the question explicitly asks for an
+  edit too.
 
 ## Create-then-setup flow
 

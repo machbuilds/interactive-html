@@ -45,14 +45,16 @@ Install once, then in any Claude session, in any folder with HTML:
 python cli/install_skill.py
 ```
 
-Then just ask:
+This installs two skills:
 
-> *"make this page interactive"*
-
-The session **itself** becomes the agent — no separate process, no cold
-start. When you comment, your live Claude session edits the HTML directly.
-If you only have content and no file, say *"make an interactive page from
-this"* and Claude writes the HTML first.
+> *"make this page interactive"* — **interactive-html**: the session
+> **itself** becomes the agent. No separate process, no cold start. When
+> you comment, your live Claude session edits the HTML directly.
+>
+> *"build me a page about …"* — **html-designer**: generates a polished,
+> self-contained HTML page from a description or pasted content (semantic
+> markup, dark mode, responsive, zero dependencies), then offers to make
+> it interactive so you iterate by commenting instead of describing.
 
 ### Cursor — agent-agnostic adapter
 
@@ -174,8 +176,9 @@ interactive-html/
 │   └── install_skill.py   # assemble a self-contained Claude Code skill
 ├── agent/
 │   └── agent.py      # bundled Anthropic agent (urllib, no SDK)
-├── skill/
-│   └── SKILL.md      # Claude Code skill — "make this page interactive"
+├── skills/
+│   ├── interactive-html/   # Claude Code skill — "make this page interactive"
+│   └── html-designer/      # Claude Code skill — "build me a page about …"
 ├── adapters/
 │   └── cursor/       # Cursor .mdc rule + install notes
 └── examples/

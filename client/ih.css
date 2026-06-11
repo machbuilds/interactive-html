@@ -355,6 +355,59 @@
 }
 .ih-editor-actions button { padding: 0.3rem 0.7rem; font-size: 0.84rem; }
 
+/* ---------- intent toggle (Change / Question) ---------- */
+.ih-intent {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--ih-border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.ih-intent button {
+  border: none;
+  border-radius: 0;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.78rem;
+  color: var(--ih-fg-muted);
+}
+.ih-intent button.is-active {
+  background: var(--ih-accent);
+  color: var(--ih-accent-fg);
+}
+
+/* ---------- Q&A tab ---------- */
+.ih-qa-answer {
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--ih-bg-soft);
+  border-left: 3px solid var(--ih-success);
+  border-radius: var(--ih-radius-sm);
+  white-space: pre-wrap;
+}
+.ih-qa-answer.ih-qa-waiting {
+  border-left-color: var(--ih-warn);
+  color: var(--ih-fg-muted);
+  font-style: italic;
+}
+
+/* ---------- region-draw overlay ---------- */
+.ih-region-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ih-z-overlay);
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.04);
+}
+.ih-region-overlay[hidden] { display: none; }
+.ih-region-rect {
+  position: fixed;
+  border: 2px dashed var(--ih-accent);
+  background: rgba(37, 99, 235, 0.12);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
 /* ---------- toast ---------- */
 .ih-toast {
   position: fixed;
