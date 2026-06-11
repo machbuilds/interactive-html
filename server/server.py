@@ -376,7 +376,13 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Interactive HTML server")
     p.add_argument("artifact_dir", help="directory containing .html files")
     p.add_argument("--port", type=int, default=5050)
-    p.add_argument("--host", default="", help="bind host (default: all interfaces)")
+    p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind host (default: 127.0.0.1 — localhost only). "
+             "Pass --host 0.0.0.0 to expose on your network; the server has "
+             "no auth, so only do that on a network you trust.",
+    )
     p.add_argument(
         "--idle-timeout",
         type=int,
