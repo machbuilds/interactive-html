@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Python tests
+        working-directory: tests
+        run: python -m unittest discover -v
+      - name: Client JS syntax
+        run: node --check client/ih.js
+      - name: Compile all entry points
+        run: python -m py_compile server/server.py cli/ih.py cli/inject.py cli/watch.py cli/install_skill.py agent/agent.py
