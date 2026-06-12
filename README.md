@@ -1,20 +1,46 @@
+<div align="center">
+
 # Interactive HTML
 
-> **Inline comments on any HTML page — an agent applies them.**
->
-> Highlight text, pick an element, or leave a general note in any local
-> HTML file. The page POSTs your comment to a tiny local server. An agent
-> reads it, edits the HTML, and the page reloads with the change
-> highlighted — scroll preserved.
+### Stop describing changes in chat. Point at them.
 
-<!-- ![demo](docs/demo.gif) -->
-<!-- Demo GIF goes here. See "Recording the demo" below. -->
+**Comment on any HTML page — an AI agent applies the change and the page
+updates in front of you.**
 
-Works with Claude Code, Cursor, or any agent CLI. ~43KB client, zero
-dependencies, no build step. Static HTML stays static — the comment layer
-is a `<link>` + `<script>` you can strip back out in one command.
+[![CI](https://github.com/machbuilds/interactive-html/actions/workflows/ci.yml/badge.svg)](https://github.com/machbuilds/interactive-html/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](#)
+[![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20·%20Cursor%20·%20any%20agent%20CLI-8A2BE2)](#three-ways-to-drive-it)
+
+![demo: highlight the title, comment "make this title punchier", the agent rewrites it and the page reloads with a tour](docs/demo.gif)
+
+</div>
 
 ---
+
+You know the loop: an AI generates a page that's 80% right, and then you
+burn twenty minutes typing *"no, the other heading… smaller… not that
+small…"* into a chat box.
+
+This kills that loop. **Highlight the heading. Type "smaller". Done.**
+The comment carries the exact element, so the agent never guesses what
+"the other heading" meant — and the page reloads with the change
+highlighted, scroll position preserved.
+
+- ✏️ **Change** — highlight text or pick an element, say what's wrong,
+  watch it get fixed
+- ❓ **Question** — don't understand a section? Ask in place. The agent
+  answers in a Q&A panel **without touching the page**. Your questions
+  build a list automatically — no copy-paste
+- ▭ **Region** — can't put it into words? Drag a box around the messy
+  area and say "make this better". The agent receives every element you
+  circled
+
+It's ~43KB of vanilla JS injected into your pages, a stdlib-only Python
+server, and an [open file protocol](PROTOCOL.md) any agent can speak.
+No build step, no npm, no pip install. Your HTML stays static — strip the
+layer back out with one command.
 
 ## Quickstart
 
@@ -24,79 +50,52 @@ cd interactive-html
 python cli/ih.py examples
 ```
 
-That's it — server, watcher, and agent all start in one supervised
-process. Your browser opens to `http://localhost:5050/sample.html`.
-Highlight text in the page, write a comment, hit Submit. Within seconds
-the page reloads with the change applied and a tour walking you through it.
+One command starts everything — server, watcher, agent. Your browser opens,
+you highlight a sentence, write a comment, hit Submit. A few seconds later
+the page reloads with the change applied and a walkthrough of what changed.
 
-`Ctrl-C` stops everything. By default the watcher drives `claude -p`
-(Claude Code in headless mode — uses your existing auth, no API key
-needed). [Other agents](#agents) below.
-
----
+`Ctrl-C` stops it all. The default agent is `claude -p` (Claude Code
+headless — uses your existing login, **no API key needed**).
 
 ## Three ways to drive it
 
-### Claude Code skill — lowest friction
-
-Install once, then in any Claude session, in any folder with HTML:
+### 1 · Claude Code skill — fastest loop
 
 ```bash
 python cli/install_skill.py
 ```
 
-This installs two skills:
+Installs two skills. In any Claude session:
 
-> *"make this page interactive"* — **interactive-html**: the session
-> **itself** becomes the agent. No separate process, no cold start. When
-> you comment, your live Claude session edits the HTML directly.
+> **"make this page interactive"** — the session *itself* becomes the
+> agent. No second process, no cold start: comment-to-change in a few
+> seconds, and questions get conversational-quality answers.
 >
-> *"build me a page about …"* — **html-designer**: generates a polished,
-> self-contained HTML page from a description or pasted content (semantic
-> markup, dark mode, responsive, zero dependencies), then offers to make
-> it interactive so you iterate by commenting instead of describing.
+> **"build me a page about …"** — generates a polished, self-contained
+> page (design tokens, light/dark, inline-SVG diagrams, responsive, zero
+> network deps), then offers to make it interactive. Create with words,
+> refine by pointing.
 
-### Cursor — agent-agnostic adapter
+### 2 · Cursor
 
 ```bash
 cp adapters/cursor/interactive-html.mdc .cursor/rules/
 ```
 
-In any Cursor chat: *"make this page interactive"*, then *"process new
-comments"* after you submit. See [adapters/cursor/](adapters/cursor/) for
-the workflow note (Cursor lacks Claude Code's idle-monitor primitive).
+*"make this page interactive"*, then *"process new comments"* after you
+submit. Details in [adapters/cursor/](adapters/cursor/).
 
-### Manual — three terminals, full control
+### 3 · Headless — no chat window at all
 
 ```bash
-python cli/inject.py examples         # add the <link>/<script> tags
-python server/server.py examples      # terminal 1: serve
-python cli/watch.py examples          # terminal 2: dispatch to an agent
+python cli/ih.py ./your-pages
 ```
 
-Same loop as `cli/ih.py`, just unbundled.
-
----
-
-## What you get
-
-- **Three comment modes**: text selection (highlight prose), element pick
-  (click any region; shift-click to add more), or a general note that
-  isn't anchored anywhere
-- **Live agent status** in the page busy banner: "editing page.html…",
-  "recording the changes…" — fed by SSE from `.ih/progress.json`
-- **Tour on reload**: every change gets a title from the agent and a
-  highlighted region; arrow keys walk through them
-- **Scroll preserved**: leave a comment near the bottom, get the change,
-  stay there
-- **SSE-driven, not polling**: page reacts within ~1s of the agent's last
-  write. A 15s slow-poll runs only as a fallback if SSE drops
-- **Restart-safe**: the watcher tracks processed batch IDs in a cursor
-  file so killing and restarting doesn't replay old comments
-- **Self-contained**: Python standard library, vanilla JS, no `pip
-  install`, no `npm install`, no build step
-
----
+The watcher dispatches comments to `claude -p`, to the bundled
+dependency-free Anthropic agent (`--agent builtin`, needs
+`ANTHROPIC_API_KEY`), or to any CLI that reads a prompt on stdin
+(`--agent-cmd "your-cli"`). Comments queue safely on disk even when
+nothing is listening — the next run picks up the backlog.
 
 ## How it works
 
@@ -121,42 +120,38 @@ sequenceDiagram
 
 | | Who | What happens |
 |---|---|---|
-| 💬 | **You** | Highlight prose, pick an element, or leave a note — then Submit |
+| 💬 | **You** | Highlight prose, pick an element, drag a region, or ask a question |
 | 📥 | **Page → Server** | Comment lands in `.ih/comments.jsonl` |
-| ✏️ | **Agent** | Reads it, edits the HTML, records changes in `.ih/updates.json` |
+| ✏️ | **Agent** | Edits the HTML — or answers the question — and records it in `.ih/updates.json` |
 | 🔔 | **Server → Page** | SSE event the instant the file changes |
-| ✨ | **Page → You** | Auto-reload (scroll preserved) + guided tour of every change |
+| ✨ | **Page → You** | Auto-reload + guided tour of changes, or the answer appears in the Q&A tab — no reload |
 
-The file contract (`.ih/comments.jsonl` + `.ih/updates.json` +
-`data-ih-change` anchors in the HTML) is the **real product** — see
-[PROTOCOL.md](PROTOCOL.md). Any agent that implements it interoperates
-with this in-page client. The bundled server, JS client, watcher, and
-agents are reference implementations.
+The file contract is the real product: `.ih/comments.jsonl` in,
+`.ih/updates.json` out, `data-ih-change` anchors in the HTML. It's fully
+specified in [PROTOCOL.md](PROTOCOL.md) — implement it in any language and
+your agent interoperates with this client. Everything in this repo is a
+reference implementation.
 
----
+## What you get
 
-## Agents
-
-By default the watcher pipes the prompt to `claude -p
---permission-mode acceptEdits`. To switch:
-
-```bash
-# bundled dependency-free Anthropic agent (needs ANTHROPIC_API_KEY)
-python cli/ih.py --agent builtin
-
-# any other CLI that reads a prompt on stdin and can edit files
-python cli/ih.py --agent-cmd "your-cli --flags"
-
-# no agent — capture comments only (writes to .ih/comments.jsonl for later)
-python cli/ih.py --no-watch
-```
-
-The bundled agent (`agent/agent.py`) talks to the Messages API over
-`urllib` with a four-tool file loop (list, read, edit, write). It writes
-`.ih/progress.json` as it goes, so the in-page busy banner shows live
-status — something `claude -p` doesn't provide.
-
----
+- **Four comment surfaces** — text selection, element pick (shift-click
+  for more), region drag, and page-level notes
+- **Questions as a first-class intent** — answers render in place, no
+  page reload, anchored to where you asked
+- **Live agent status** — the busy banner streams real progress
+  ("editing report.html…") over SSE
+- **Tour on reload** — every change gets a title and a highlighted
+  region; arrow keys to walk through
+- **Scroll preserved** across reloads — comment at the bottom, stay at
+  the bottom
+- **SSE-driven** — the page reacts ~1s after the agent finishes; a slow
+  poll exists only as a fallback
+- **Restart-safe** — processed batches tracked in a cursor file; nothing
+  replays, nothing is lost
+- **Localhost-only by default** — the server binds `127.0.0.1`; your
+  pages and your agent are not exposed to the network
+- **Reversible** — `python cli/inject.py <dir> --remove` returns clean
+  static HTML
 
 ## Layout
 
@@ -173,12 +168,12 @@ interactive-html/
 │   ├── ih.py         # one-command launcher
 │   ├── inject.py     # idempotent tag injection / removal
 │   ├── watch.py      # dispatches new comment batches to an agent
-│   └── install_skill.py   # assemble a self-contained Claude Code skill
+│   └── install_skill.py   # installs both Claude Code skills
 ├── agent/
 │   └── agent.py      # bundled Anthropic agent (urllib, no SDK)
 ├── skills/
-│   ├── interactive-html/   # Claude Code skill — "make this page interactive"
-│   └── html-designer/      # Claude Code skill — "build me a page about …"
+│   ├── interactive-html/   # "make this page interactive"
+│   └── html-designer/      # "build me a page about …"
 ├── adapters/
 │   └── cursor/       # Cursor .mdc rule + install notes
 └── examples/
@@ -186,62 +181,39 @@ interactive-html/
     └── sse-explainer.html  # a real artifact — generated with html-designer
 ```
 
----
+## FAQ
 
-## Recording the demo
+**Do I have to keep a chat open?**
+Only in skill mode, where your live Claude session is the agent (that's
+also the fastest mode). Headless mode (`cli/ih.py`) needs no chat — just a
+terminal. And comments persist on disk either way: anything submitted
+while nothing is listening gets processed by the next session or watcher
+run.
 
-The magic of this project happens in the browser (highlight → page reload
-+ tour), so the canonical demo GIF needs a screen recorder, not a
-terminal recorder. Two recommended paths on macOS:
+**Does it work on a deployed site?**
+It's a local-first tool by design: the agent needs filesystem access to
+edit your HTML, and the server intentionally binds localhost with no auth.
+Run it next to the files, not in production.
 
-```bash
-# A. macOS native screen capture (⇧⌘5, select the browser window),
-#    convert to GIF with ffmpeg
-ffmpeg -i recording.mov -vf "fps=15,scale=900:-1:flags=lanczos" docs/demo.gif
+**What does the agent cost?**
+Skill mode and the default headless agent ride your existing Claude
+subscription. The bundled `--agent builtin` uses the Anthropic API
+directly (per-token billing, `ANTHROPIC_API_KEY`).
 
-# B. Kap — free, OSS, native macOS, records straight to GIF
-brew install --cask kap
-```
+**Can I write my own agent?**
+Yes — that's the point. Read [PROTOCOL.md](PROTOCOL.md); a conforming
+agent is "read a JSONL line, edit HTML, append one JSON object."
 
-Drop the result at `docs/demo.gif` and uncomment the `![demo]` line near
-the top of this file.
+## Status & roadmap
 
----
+V1, single-author, used in real iteration loops daily. The protocol and
+HTTP surface are stable (additive changes only). On the roadmap — and
+open for contribution:
 
-## Remove the comment layer
-
-When you want a clean static copy back:
-
-```bash
-python cli/inject.py examples --remove
-```
-
-The `.ih/` directory is left in place; `rm -rf .ih/` if you don't need
-the comment history.
-
----
-
-## Status
-
-V1, single-author. Used in real iteration loops; not battle-tested at
-team-scale.
-
-What's stable:
-- File protocol (`PROTOCOL.md`) — v1, additive changes only
-- HTTP surface — same
-- The bundled server, client, watcher, and Claude Code skill
-
-What's on the roadmap (and where contributions land cleanly):
 - Comment threads (replies, resolved/unresolved)
 - Multi-user presence over the existing SSE channel
 - More agent adapters (Codex, Gemini CLI, local models)
-- Single-shot built-in agent (cut the agent loop to one API call for
-  small edits)
-
-Issues and PRs welcome. The protocol is the contract — anything that
-respects it is fair game.
-
----
+- A single-shot agent mode (one API call for small edits)
 
 ## License
 
