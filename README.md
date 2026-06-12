@@ -182,7 +182,8 @@ interactive-html/
 ├── adapters/
 │   └── cursor/       # Cursor .mdc rule + install notes
 └── examples/
-    └── sample.html
+    ├── sample.html         # minimal smoke-test page
+    └── sse-explainer.html  # a real artifact — generated with html-designer
 ```
 
 ---
