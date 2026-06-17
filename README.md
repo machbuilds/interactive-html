@@ -4,7 +4,7 @@
 
 ### Stop describing changes in chat. Point at them.
 
-**Comment on any HTML page — an AI agent applies the change and the page
+**Comment on local HTML pages — an AI agent applies the change and the page
 updates in front of you.**
 
 [![CI](https://github.com/machbuilds/interactive-html/actions/workflows/ci.yml/badge.svg)](https://github.com/machbuilds/interactive-html/actions/workflows/ci.yml)

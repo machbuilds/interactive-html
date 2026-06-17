@@ -3,7 +3,7 @@
   "name": "interactive-html",
   "owner": "machbuilds",
   "version": "1.0.0",
-  "description": "Comment on any HTML page — an AI agent applies the change and the page updates in front of you. Plus a sibling skill that generates polished, self-contained HTML to comment on.",
+  "description": "Comment on local HTML pages — an AI agent applies the change and the page updates in front of you. Plus a sibling skill that generates polished, self-contained HTML to comment on.",
   "homepage": "https://github.com/machbuilds/interactive-html",
   "repository": "https://github.com/machbuilds/interactive-html",
   "license": "MIT",
@@ -21,7 +21,7 @@
       "kind": "skill",
       "path": "skills/html-designer",
       "version": "1.0.0",
-      "description": "Generate a polished, self-contained HTML page from a description or content — semantic markup, design tokens, mandatory light/dark, inline-SVG diagrams, zero network dependencies — then offer to make it interactive.",
+      "description": "Generate a polished, self-contained HTML page from a description or content — semantic markup, design tokens, mandatory light/dark, inline-SVG diagrams, zero network dependencies — then offer to make it interactive so the user iterates by commenting on the page instead of describing changes in chat.",
       "tags": ["html", "design", "generation", "ui"]
     }
   ]
