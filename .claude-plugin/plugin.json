@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schemas.claude.ai/claude-plugin/plugin.json",
+  "name": "interactive-html",
+  "description": "Comment on local HTML pages — an AI agent applies the change and the page updates in front of you. Highlight, ask, or annotate; works with Claude Code, Cursor, or any agent CLI.",
+  "version": "1.0.0",
+  "author": { "name": "machbuilds", "url": "https://github.com/machbuilds" },
+  "homepage": "https://github.com/machbuilds/interactive-html",
+  "repository": "https://github.com/machbuilds/interactive-html",
+  "license": "MIT",
+  "keywords": ["html", "feedback", "annotations", "comments", "sse", "developer-tools"]
+}
