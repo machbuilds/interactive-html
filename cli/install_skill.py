@@ -26,10 +26,8 @@ RUNTIME_DIRS = ["client", "server", "cli", "agent"]
 TOKEN = "__IH_HOME__"
 DEFAULT_SKILLS_HOME = Path.home() / ".claude" / "skills"
 
-# interactive-html carries the runtime; html-designer is prompt-only.
 SKILLS = {
     "interactive-html": {"runtime": True},
-    "html-designer": {"runtime": False},
 }
 
 # Don't copy these into the installed skill.
@@ -87,8 +85,8 @@ def main() -> int:
     print()
     if skills_home == DEFAULT_SKILLS_HOME:
         print("Active now. In any Claude Code session, say:")
-        print('  "make this page interactive"   (interactive-html)')
-        print('  "build me a page about …"      (html-designer)')
+        print('  "make this page interactive"   — comment on existing HTML')
+        print('  "build me a page about …"      — generate one, then comment on it')
     else:
         print("To activate, ensure this path is on Claude Code's skill search path,")
         print(f"or symlink each: ln -s {skills_home}/<name> ~/.claude/skills/<name>")

@@ -4,8 +4,8 @@ version: 1.0.0
 author: machbuilds
 license: MIT
 homepage: https://github.com/machbuilds/interactive-html
-tags: [html, feedback, annotations, comments, sse, developer-tools, agent-skills]
-description: Turn a folder of static HTML into a live commenting surface and act as the agent that responds. Injects a client library, starts a local server, and watches an on-disk inbox; when the user highlights text / clicks an element / leaves a note in the page, you read it and edit the HTML in response. Trigger phrases — "make this page interactive", "make these pages interactive", "let me comment on this page", "make this interactive", "add feedback to this page", "comment on this page".
+tags: [html, generation, design, feedback, annotations, comments, sse, developer-tools, agent-skills]
+description: Build HTML pages with words, then refine them by commenting on the page. Generate a polished self-contained page from a description (or use existing HTML), inject a client library, start a local server, and act as the agent that responds — when the user highlights text, picks an element, drags a region, or asks a question, read it from the on-disk inbox and edit the HTML in response. Trigger phrases — "make this page interactive", "make these pages interactive", "let me comment on this page", "make this interactive", "add feedback to this page", "comment on this page", "build me a page", "create an html page", "turn this into a page", "make a page about", "design a page for", "make an interactive page from this".
 ---
 
 # Interactive HTML
@@ -30,9 +30,10 @@ IH_HOME = __IH_HOME__
 
 ## When to invoke
 
-- "make this page interactive" / "make these pages interactive" → **Setup flow**
+- "make this page interactive" / "make these pages interactive" → **Setup flow** (existing HTML)
 - "let me comment on this page" / "add feedback to this page" → **Setup flow**
-- "I have this content, make it an interactive page" → **Create-then-setup flow**
+- "build me a page about …" / "create an html page" / "design a page for …" → **Generate flow**, then offer the loop
+- "make an interactive page from this" / "I have this content, make it an interactive page" → **Generate flow** → **Setup flow** back-to-back, no second confirmation
 - "stop the interactive server" / "shut it down" → **Stop flow**
 - "make these pages static again" / "remove the comment layer" → **Removal flow**
 
@@ -131,13 +132,133 @@ Rules:
 - Questions never modify the page unless the question explicitly asks for an
   edit too.
 
-## Create-then-setup flow
+## Generate flow (when the user has no HTML yet)
 
-If the user has content but no HTML file (or no folder), create one first:
+When the user asks you to **build a page** ("build me a page about X", "make
+a page from this content", "make an interactive page from this"), generate
+the HTML first, then run the Setup flow on it.
 
-1. Choose/confirm a directory (default: current directory).
-2. Write a clean, self-contained `*.html` file with their content.
-3. Run the **Setup flow** on that directory.
+### 1. Gather just enough context
+
+If the user gave content or a clear description, don't interrogate them —
+infer and build. Only ask when genuinely ambiguous, and at most once:
+
+- **Purpose & audience** — who reads this and what should they do/feel?
+- **Visual feel** — light or dark, dense or spacious, serious or playful?
+- **Structure** — report, landing page, dashboard, docs, portfolio?
+
+Default when unstated: light theme with `prefers-color-scheme` dark
+support, spacious, content-first.
+
+### 2. Write the page
+
+One self-contained `*.html` file. Inline CSS in a `<style>` block. No
+external dependencies — no CDNs, no Google Fonts, no frameworks. The file
+must render perfectly from `file://` and offline. Save to the current
+directory unless the user names one. Filename from the content
+(`q3-report.html`, not `page1.html`).
+
+#### Quality baseline (always)
+
+- **Semantic HTML5** — `<header>`, `<nav>`, `<main>`, `<section>`,
+  `<article>`, `<footer>`; one `<h1>`; heading levels never skip.
+- **System font stack** — `-apple-system, BlinkMacSystemFont, "Segoe UI",
+  system-ui, sans-serif` (and a mono stack for code). Crisp everywhere,
+  zero network requests.
+- **Design tokens as CSS custom properties** — colors, spacing scale, and
+  radii defined once in `:root`, used everywhere. Makes later edits (and
+  your agent edits via interactive comments) surgical.
+- **Responsive by default** — readable at 375px, 768px, 1024px, 1440px.
+  Prefer intrinsic layouts (max-width, flex/grid with minmax, `clamp()`
+  for type) over breakpoint thickets.
+- **Dark mode is mandatory, not optional.** Every page ships both modes:
+  define all colors as tokens in `:root`, flip them in a single
+  `@media (prefers-color-scheme: dark)` block, and never hardcode a color
+  outside the tokens. A page that breaks in either mode is not done.
+- **Reduced motion** — wrap animations in `prefers-reduced-motion: no-preference`.
+- **Diagrams are inline SVG.** When the content describes structure, flow,
+  sequence, comparison, or architecture, draw it — don't describe it in a
+  paragraph. Inline `<svg>` only (no external images, no Mermaid script
+  dependency). Use `currentColor` for strokes/text and the CSS tokens for
+  fills so every diagram adapts to dark mode automatically. Label axes and
+  nodes; a diagram that needs the surrounding prose to be understood has
+  failed.
+- **Accessibility** — visible focus states (`:focus-visible`), ARIA only
+  where semantics don't already cover it, alt text, 44px minimum touch
+  targets, AA contrast.
+- **Real content** — never lorem ipsum. If the user's content is thin,
+  write plausible, specific copy from context and mark anything invented
+  with an HTML comment `<!-- TODO: verify -->`.
+
+#### Design judgment (apply, don't recite)
+
+- **Users scan, they don't read.** Strong visual hierarchy: prominence =
+  importance. Clear sections. Front-load key terms in headings.
+- **Don't make them think.** Self-evident beats clever. Use conventions —
+  logo/title top-left, nav where people expect it.
+- **Omit ruthlessly.** Cut half the words, then cut again. No happy talk,
+  no filler introductions, no "Welcome to…".
+- **One focal point per screen.** If everything shouts, nothing is heard.
+- **Group related things visually; contain nested things.** Whitespace is
+  the grouping tool, borders are the fallback.
+- **Make clickable things look clickable** without hover — shape, color,
+  placement.
+
+#### Anti-slop list (never)
+
+- Purple-to-blue gradient heroes as a default aesthetic
+- Generic three-column "feature" grids with icon + blurb
+- Decorative blobs, waves, or floating geometric shapes
+- "Get Started" / "Learn More" buttons that lead nowhere
+- Cookie-cutter testimonial sections with invented names
+- Emoji as a substitute for visual design
+- Drop-shadow rounded cards as the only component idea
+- Center-everything layouts with no hierarchy
+- Stock-photo placeholder rectangles
+
+### 3. Self-QA before delivering (mandatory)
+
+Run this checklist against the file you just wrote. Fix failures before
+handing the file off — do not deliver a page that fails any of these:
+
+- [ ] **Both color modes** — mentally render light and dark: every text/
+      background pair stays readable, no hardcoded colors outside tokens
+- [ ] **Heading hierarchy** — exactly one `<h1>`, no skipped levels
+- [ ] **No placeholder content** — zero lorem ipsum; invented facts are
+      marked `<!-- TODO: verify -->`
+- [ ] **Zero network requests** — no CDN links, no Google Fonts, no
+      external images; the page works from `file://` with WiFi off
+- [ ] **375px sanity** — nothing overflows horizontally; touch targets
+      ≥44px
+- [ ] **SVGs in both modes** — diagrams use `currentColor`/tokens, legible
+      on dark backgrounds
+- [ ] **Focus visible** — interactive elements have a `:focus-visible`
+      state
+
+### 4. Chain into the comment loop
+
+After saving:
+
+1. Tell the user the file path you wrote.
+2. Offer to open it (`open <file>` on macOS).
+3. **If the original ask was "make an interactive page…"**, proceed
+   immediately into the **Setup flow** above on the file's directory —
+   don't make the user re-ask.
+4. **Otherwise** offer: *"Want to iterate on it by commenting on the page
+   itself? Say make it interactive and I'll start the comment loop."* If
+   they accept, run Setup on the file's directory.
+
+### Revision etiquette
+
+When the user iterates later (in chat or via comments on the page):
+
+- Edit the existing file; never regenerate from scratch unless asked —
+  regeneration destroys their accumulated tweaks.
+- Keep edits scoped to what was asked. The design tokens make global
+  changes (colors, spacing) one-line edits.
+- If a request conflicts with the quality baseline (e.g. "add a purple
+  gradient hero"), do what they asked — the baseline is a default, not a
+  veto over the user.
 
 ## On startup in a directory that already has `.ih/`
 
