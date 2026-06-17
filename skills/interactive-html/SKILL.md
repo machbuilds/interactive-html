@@ -5,7 +5,7 @@ author: machbuilds
 license: MIT
 homepage: https://github.com/machbuilds/interactive-html
 tags: [html, generation, design, feedback, annotations, comments, sse, developer-tools, agent-skills]
-description: Build HTML pages with words, then refine them by commenting on the page. Generate a polished self-contained page from a description (or use existing HTML), inject a client library, start a local server, and act as the agent that responds — when the user highlights text, picks an element, drags a region, or asks a question, read it from the on-disk inbox and edit the HTML in response. Trigger phrases — "make this page interactive", "make these pages interactive", "let me comment on this page", "make this interactive", "add feedback to this page", "comment on this page", "build me a page", "create an html page", "turn this into a page", "make a page about", "design a page for", "make an interactive page from this".
+description: Turn a folder of static HTML into a live commenting surface and act as the agent that responds. Inject a client library, start a local server, watch an on-disk inbox; when the user highlights text, picks an element, drags a region, or asks a question, read it and edit the HTML in response. If the user has no HTML yet, generate a polished self-contained page from their description first, then start the comment loop. Trigger phrases — "make this page interactive", "make these pages interactive", "let me comment on this page", "make this interactive", "add feedback to this page", "comment on this page", "build me a page", "create an html page", "turn this into a page", "make a page about", "design a page for", "make an interactive page from this".
 ---
 
 # Interactive HTML

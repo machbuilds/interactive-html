@@ -4,8 +4,8 @@
 
 ### Stop describing changes in chat. Point at them.
 
-**Generate HTML pages with words, then refine them by commenting on the page.
-An AI agent applies the change and the page reloads with a tour of what changed.**
+**Comment on local HTML pages — highlight, ask, or annotate; an AI agent
+applies the change and the page reloads with a tour of what changed.**
 
 [![CI](https://github.com/machbuilds/interactive-html/actions/workflows/ci.yml/badge.svg)](https://github.com/machbuilds/interactive-html/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

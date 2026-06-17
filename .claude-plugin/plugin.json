@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.claude.ai/claude-plugin/plugin.json",
   "name": "interactive-html",
-  "description": "Build HTML pages with words, then refine them by commenting on the page. Generate a polished self-contained page (or use existing HTML); highlight, ask, or annotate; an AI agent edits the HTML and the page reloads with a tour of every change. Works with Claude Code, Cursor, or any agent CLI.",
+  "description": "Comment on local HTML pages — highlight, ask, or annotate; an AI agent edits the HTML and the page reloads with a tour of every change. Bring your own pages, or have the skill generate one to comment on. Works with Claude Code, Cursor, or any agent CLI.",
   "version": "1.0.0",
   "author": { "name": "machbuilds", "url": "https://github.com/machbuilds" },
   "homepage": "https://github.com/machbuilds/interactive-html",
