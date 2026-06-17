@@ -62,10 +62,12 @@ headless — uses your existing login, **no API key needed**).
 ### 1 · Claude Code skill — fastest loop
 
 ```bash
-python cli/install_skill.py
+git clone https://github.com/machbuilds/interactive-html
+python interactive-html/cli/install_skill.py
 ```
 
-Installs two skills. In any Claude session:
+That's it — installs both skills into `~/.claude/skills/`, fully
+self-contained. In any Claude session, in any folder with HTML:
 
 > **"make this page interactive"** — the session *itself* becomes the
 > agent. No second process, no cold start: comment-to-change in a few

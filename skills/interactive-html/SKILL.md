@@ -1,5 +1,10 @@
 ---
 name: interactive-html
+version: 1.0.0
+author: machbuilds
+license: MIT
+homepage: https://github.com/machbuilds/interactive-html
+tags: [html, feedback, annotations, comments, sse, developer-tools, agent-skills]
 description: Turn a folder of static HTML into a live commenting surface and act as the agent that responds. Injects a client library, starts a local server, and watches an on-disk inbox; when the user highlights text / clicks an element / leaves a note in the page, you read it and edit the HTML in response. Trigger phrases — "make this page interactive", "make these pages interactive", "let me comment on this page", "make this interactive", "add feedback to this page", "comment on this page".
 ---
 

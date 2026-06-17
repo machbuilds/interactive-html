@@ -1,5 +1,10 @@
 ---
 name: html-designer
+version: 1.0.0
+author: machbuilds
+license: MIT
+homepage: https://github.com/machbuilds/interactive-html
+tags: [html, design, generation, ui, agent-skills]
 description: Create a polished, self-contained HTML page from a description, content, or notes — then offer to make it interactive so the user can iterate by commenting on the page itself. Trigger phrases — "build me a page", "create an html page", "turn this into a page", "make a page about", "design a page for", "make an interactive page from this".
 ---
 
